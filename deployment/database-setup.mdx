@@ -89,29 +89,30 @@ Refugio supports both PostgreSQL and MySQL databases. This guide covers installa
   </Step>
 </Steps>
 
-### Import Schema
+### Create Schema
 
-The PostgreSQL schema is located at `sql/refugio.sql`:
+You need to create the database schema based on the structure documented in the [Database Schema](/api/database-schema) page. The schema includes 6 tables:
 
-```bash
-# Import the schema
-psql -U postgres -d refugio -f sql/refugio.sql
-
-# Or if using the created user
-psql -U refugio_user -d refugio -f sql/refugio.sql
-```
-
-<Accordion title="View Schema Structure">
-  The schema creates 6 tables:
-  - **usuarios** - User accounts with roles (admin/user)
-  - **habitaciones** - Rooms in the refuge
-  - **camas** - Individual beds
-  - **reservas** - Reservation records
-  - **reservas_camas** - Junction table for bed assignments
-  - **acompanantes** - Companion information
+<Accordion title="Quick Schema Creation">
+  Create the following tables in order:
   
-  See the [Database Schema](/api/database-schema) documentation for complete details.
+  1. **usuarios** - User accounts with roles (admin/user)
+  2. **habitaciones** - Rooms in the refuge
+  3. **camas** - Individual beds
+  4. **reservas** - Reservation records
+  5. **reservas_camas** - Junction table for bed assignments
+  6. **acompanantes** - Companion information
+  
+  See the [Database Schema](/api/database-schema) documentation for complete table definitions, field types, and relationships.
 </Accordion>
+
+<Note>
+  If your repository includes `sql/refugio.sql`, you can import it directly:
+  ```bash
+  psql -U refugio_user -d refugio -f sql/refugio.sql
+  ```
+  Otherwise, refer to the [Database Schema](/api/database-schema) documentation to create the tables manually.
+</Note>
 
 ### Configure PostgreSQL Authentication
 
@@ -214,13 +215,17 @@ sudo systemctl restart postgresql
   </Step>
 </Steps>
 
-### Import Schema
+### Create Schema
 
-The MySQL schema is located at `sql/refugio_mysql.sql`:
+Create the database schema based on the structure documented in the [Database Schema](/api/database-schema) page.
 
-```bash
-mysql -u refugio_user -p refugio < sql/refugio_mysql.sql
-```
+<Note>
+  If your repository includes `sql/refugio_mysql.sql`, you can import it directly:
+  ```bash
+  mysql -u refugio_user -p refugio < sql/refugio_mysql.sql
+  ```
+  Otherwise, refer to the [Database Schema](/api/database-schema) documentation to create the tables manually.
+</Note>
 
 ## Verify Installation
 

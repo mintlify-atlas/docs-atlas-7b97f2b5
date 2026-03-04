@@ -50,9 +50,10 @@ mode: "custom"
 
   <Steps>
     <Step title="Set up your database">
-      Create a PostgreSQL or MySQL database and import the schema:
+      Create a PostgreSQL or MySQL database and set up the schema. See the [Database Setup](/deployment/database-setup) guide for detailed instructions.
       ```bash
-      psql -U postgres -d refugio -f sql/refugio.sql
+      # Create database
+      psql -U postgres -c "CREATE DATABASE refugio;"
       ```
     </Step>
     <Step title="Configure your connection">

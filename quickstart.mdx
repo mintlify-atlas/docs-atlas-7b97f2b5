@@ -53,21 +53,18 @@ Before you begin, ensure you have:
       ```
     </CodeGroup>
 
-    Import the database schema:
+    Create the database schema. Refer to the [Database Schema](/api/database-schema) documentation for complete table definitions.
 
-    <CodeGroup>
-      ```bash Windows (PowerShell)
-      psql -U postgres -d refugio -f sql\refugio.sql
-      ```
+    ```bash
+    # If you have the SQL file, import it:
+    psql -U postgres -d refugio -f sql/refugio.sql
+    
+    # Otherwise, create tables manually using the schema documentation
+    ```
 
-      ```bash macOS/Linux
-      psql -U postgres -d refugio -f sql/refugio.sql
-      ```
-    </CodeGroup>
-
-    <Check>
-      The SQL file includes sample data with test users and room configurations.
-    </Check>
+    <Note>
+      The schema includes sample data with test users (admin@hostel.com/admin123) and room configurations.
+    </Note>
   </Step>
 
   <Step title="Configure Database Connection">
