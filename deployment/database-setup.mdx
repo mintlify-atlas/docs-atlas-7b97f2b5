@@ -1,0 +1,418 @@
+---
+title: "Database Setup"
+description: "Install and configure PostgreSQL or MySQL for Refugio"
+---
+
+## Overview
+
+Refugio supports both PostgreSQL and MySQL databases. This guide covers installation, schema creation, and initial data setup for both systems.
+
+<Info>
+  PostgreSQL is recommended for production due to better support for ENUM types and concurrent connections.
+</Info>
+
+## PostgreSQL Setup
+
+### Installation
+
+<Tabs>
+  <Tab title="Ubuntu/Debian">
+    ```bash
+    # Update package list
+    sudo apt update
+    
+    # Install PostgreSQL
+    sudo apt install postgresql postgresql-contrib
+    
+    # Start PostgreSQL service
+    sudo systemctl start postgresql
+    sudo systemctl enable postgresql
+    
+    # Check status
+    sudo systemctl status postgresql
+    ```
+  </Tab>
+  <Tab title="CentOS/RHEL">
+    ```bash
+    # Install PostgreSQL repository
+    sudo yum install postgresql-server postgresql-contrib
+    
+    # Initialize database
+    sudo postgresql-setup initdb
+    
+    # Start and enable service
+    sudo systemctl start postgresql
+    sudo systemctl enable postgresql
+    ```
+  </Tab>
+  <Tab title="Docker">
+    ```bash
+    # Run PostgreSQL container
+    docker run -d \
+      --name refugio-postgres \
+      -e POSTGRES_PASSWORD=refugio_password \
+      -e POSTGRES_USER=refugio \
+      -e POSTGRES_DB=refugio \
+      -p 5432:5432 \
+      -v refugio-data:/var/lib/postgresql/data \
+      postgres:14
+    
+    # Check container status
+    docker ps
+    ```
+  </Tab>
+</Tabs>
+
+### Create Database and User
+
+<Steps>
+  <Step title="Access PostgreSQL">
+    ```bash
+    sudo -u postgres psql
+    ```
+  </Step>
+  <Step title="Create Database">
+    ```sql
+    CREATE DATABASE refugio;
+    ```
+  </Step>
+  <Step title="Create User">
+    ```sql
+    CREATE USER refugio_user WITH ENCRYPTED PASSWORD 'your_secure_password';
+    GRANT ALL PRIVILEGES ON DATABASE refugio TO refugio_user;
+    ```
+  </Step>
+  <Step title="Exit PostgreSQL">
+    ```sql
+    \q
+    ```
+  </Step>
+</Steps>
+
+### Import Schema
+
+The PostgreSQL schema is located at `sql/refugio.sql`:
+
+```bash
+# Import the schema
+psql -U postgres -d refugio -f sql/refugio.sql
+
+# Or if using the created user
+psql -U refugio_user -d refugio -f sql/refugio.sql
+```
+
+<Accordion title="View Schema Structure">
+  The schema creates 6 tables:
+  - **usuarios** - User accounts with roles (admin/user)
+  - **habitaciones** - Rooms in the refuge
+  - **camas** - Individual beds
+  - **reservas** - Reservation records
+  - **reservas_camas** - Junction table for bed assignments
+  - **acompanantes** - Companion information
+  
+  See the [Database Schema](/api/database-schema) documentation for complete details.
+</Accordion>
+
+### Configure PostgreSQL Authentication
+
+Edit the PostgreSQL configuration to allow password authentication:
+
+```bash
+sudo nano /etc/postgresql/14/main/pg_hba.conf
+```
+
+Add or modify:
+
+```conf
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+local   all             all                                     peer
+host    refugio         refugio_user    127.0.0.1/32           md5
+host    refugio         refugio_user    ::1/128                md5
+```
+
+Restart PostgreSQL:
+
+```bash
+sudo systemctl restart postgresql
+```
+
+## MySQL Setup
+
+### Installation
+
+<Tabs>
+  <Tab title="Ubuntu/Debian">
+    ```bash
+    # Install MySQL server
+    sudo apt update
+    sudo apt install mysql-server
+    
+    # Secure installation
+    sudo mysql_secure_installation
+    
+    # Start MySQL
+    sudo systemctl start mysql
+    sudo systemctl enable mysql
+    ```
+  </Tab>
+  <Tab title="CentOS/RHEL">
+    ```bash
+    # Install MySQL
+    sudo yum install mysql-server
+    
+    # Start and enable
+    sudo systemctl start mysqld
+    sudo systemctl enable mysqld
+    
+    # Get temporary root password
+    sudo grep 'temporary password' /var/log/mysqld.log
+    
+    # Secure installation
+    sudo mysql_secure_installation
+    ```
+  </Tab>
+  <Tab title="Docker">
+    ```bash
+    # Run MySQL container
+    docker run -d \
+      --name refugio-mysql \
+      -e MYSQL_ROOT_PASSWORD=root_password \
+      -e MYSQL_DATABASE=refugio \
+      -e MYSQL_USER=refugio_user \
+      -e MYSQL_PASSWORD=refugio_password \
+      -p 3306:3306 \
+      -v refugio-data:/var/lib/mysql \
+      mysql:8.0
+    ```
+  </Tab>
+</Tabs>
+
+### Create Database and User
+
+<Steps>
+  <Step title="Access MySQL">
+    ```bash
+    sudo mysql -u root -p
+    ```
+  </Step>
+  <Step title="Create Database">
+    ```sql
+    CREATE DATABASE refugio CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    ```
+  </Step>
+  <Step title="Create User">
+    ```sql
+    CREATE USER 'refugio_user'@'localhost' IDENTIFIED BY 'your_secure_password';
+    GRANT ALL PRIVILEGES ON refugio.* TO 'refugio_user'@'localhost';
+    FLUSH PRIVILEGES;
+    ```
+  </Step>
+  <Step title="Exit MySQL">
+    ```sql
+    EXIT;
+    ```
+  </Step>
+</Steps>
+
+### Import Schema
+
+The MySQL schema is located at `sql/refugio_mysql.sql`:
+
+```bash
+mysql -u refugio_user -p refugio < sql/refugio_mysql.sql
+```
+
+## Verify Installation
+
+### Test Database Connection
+
+<Tabs>
+  <Tab title="PostgreSQL">
+    ```bash
+    # Test connection
+    psql -U refugio_user -d refugio -c "SELECT version();"
+    
+    # List tables
+    psql -U refugio_user -d refugio -c "\dt"
+    
+    # Count users
+    psql -U refugio_user -d refugio -c "SELECT COUNT(*) FROM usuarios;"
+    ```
+  </Tab>
+  <Tab title="MySQL">
+    ```bash
+    # Test connection
+    mysql -u refugio_user -p -e "SELECT VERSION();"
+    
+    # List tables
+    mysql -u refugio_user -p refugio -e "SHOW TABLES;"
+    
+    # Count users
+    mysql -u refugio_user -p refugio -e "SELECT COUNT(*) FROM usuarios;"
+    ```
+  </Tab>
+</Tabs>
+
+### Use Verification Script
+
+Refugio includes a verification script:
+
+```bash
+php verificar_mysql.php
+```
+
+This script will:
+- Test database connectivity
+- Verify all tables exist
+- Check for default admin account
+- Validate schema structure
+
+## Default Test Data
+
+The schema includes three default user accounts:
+
+| Role | Email | Password | Member # |
+|------|-------|----------|----------|
+| Admin | admin@hostel.com | admin123 | A001 |
+| User | user1@mail.com | user123 | U001 |
+| User | user2@mail.com | user123 | U002 |
+
+<Warning>
+  **CRITICAL:** Change these passwords immediately after first login, especially in production!
+</Warning>
+
+## Database Backup
+
+### PostgreSQL Backup
+
+```bash
+# Create backup
+pg_dump -U refugio_user -d refugio > refugio_backup_$(date +%Y%m%d).sql
+
+# Restore backup
+psql -U refugio_user -d refugio < refugio_backup_20260304.sql
+```
+
+### MySQL Backup
+
+```bash
+# Create backup
+mysqldump -u refugio_user -p refugio > refugio_backup_$(date +%Y%m%d).sql
+
+# Restore backup
+mysql -u refugio_user -p refugio < refugio_backup_20260304.sql
+```
+
+### Automated Backups
+
+Create a cron job for daily backups:
+
+```bash
+# Edit crontab
+crontab -e
+
+# Add daily backup at 2 AM (PostgreSQL)
+0 2 * * * pg_dump -U refugio_user refugio > /backups/refugio_$(date +\%Y\%m\%d).sql
+
+# Or for MySQL
+0 2 * * * mysqldump -u refugio_user -pPASSWORD refugio > /backups/refugio_$(date +\%Y\%m\%d).sql
+```
+
+## Performance Tuning
+
+### PostgreSQL
+
+```bash
+# Edit postgresql.conf
+sudo nano /etc/postgresql/14/main/postgresql.conf
+```
+
+Optimize these settings based on available RAM:
+
+```ini
+# For 2GB RAM server
+shared_buffers = 512MB
+effective_cache_size = 1536MB
+maintenance_work_mem = 128MB
+checkpoint_completion_target = 0.9
+wal_buffers = 16MB
+default_statistics_target = 100
+random_page_cost = 1.1
+effective_io_concurrency = 200
+work_mem = 2MB
+min_wal_size = 1GB
+max_wal_size = 4GB
+```
+
+### MySQL
+
+```bash
+# Edit my.cnf
+sudo nano /etc/mysql/my.cnf
+```
+
+Optimize for InnoDB:
+
+```ini
+[mysqld]
+innodb_buffer_pool_size = 512M
+innodb_log_file_size = 128M
+innodb_flush_log_at_trx_commit = 2
+innodb_flush_method = O_DIRECT
+max_connections = 100
+query_cache_size = 64M
+query_cache_type = 1
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Connection Refused">
+    **PostgreSQL:**
+    ```bash
+    # Check if PostgreSQL is running
+    sudo systemctl status postgresql
+    
+    # Check listening port
+    sudo netstat -plnt | grep 5432
+    
+    # Review logs
+    sudo tail -f /var/log/postgresql/postgresql-14-main.log
+    ```
+    
+    **MySQL:**
+    ```bash
+    # Check if MySQL is running
+    sudo systemctl status mysql
+    
+    # Check listening port
+    sudo netstat -plnt | grep 3306
+    
+    # Review logs
+    sudo tail -f /var/log/mysql/error.log
+    ```
+  </Accordion>
+  <Accordion title="Authentication Failed">
+    - Verify username and password
+    - Check `pg_hba.conf` (PostgreSQL) or user grants (MySQL)
+    - Ensure user has correct privileges
+    - Try resetting the password
+  </Accordion>
+  <Accordion title="Schema Import Errors">
+    - Ensure database is empty before import
+    - Check file encoding (should be UTF-8)
+    - Verify PostgreSQL/MySQL version compatibility
+    - Review error messages for specific table issues
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/deployment/configuration">
+    Configure Refugio to connect to your database
+  </Card>
+  <Card title="Database Schema" icon="table" href="/api/database-schema">
+    Learn about the database structure
+  </Card>
+</CardGroup>

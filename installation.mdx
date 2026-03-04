@@ -1,0 +1,996 @@
+---
+title: Installation Guide
+description: Complete installation instructions for deploying Refugio in production environments
+---
+
+# Installation Guide
+
+This comprehensive guide covers production-ready installation of Refugio on various platforms and configurations.
+
+<Warning>
+  This guide is for production deployments. For quick local testing, see the [Quick Start Guide](/quickstart).
+</Warning>
+
+## System Requirements
+
+### Server Requirements
+
+<AccordionGroup>
+  <Accordion title="PHP Requirements">
+    - **PHP Version:** 7.4 or higher (8.0+ recommended)
+    - **Required Extensions:**
+      - `pdo` - PDO database abstraction
+      - `pdo_pgsql` - PostgreSQL driver (or `pdo_mysql` for MySQL)
+      - `session` - Session handling
+      - `mbstring` - Multibyte string functions
+      - `json` - JSON handling
+      - `openssl` - Secure password hashing
+
+    Verify installed extensions:
+    ```bash
+    php -m | grep -E "pdo|session|mbstring|json|openssl"
+    ```
+  </Accordion>
+
+  <Accordion title="Database Requirements">
+    **PostgreSQL (Recommended):**
+    - Version 12 or higher
+    - UTF-8 encoding support
+    - At least 100MB free space (for small deployments)
+
+    **MySQL (Alternative):**
+    - Version 5.7 or higher (8.0+ recommended)
+    - InnoDB storage engine
+    - UTF-8 (utf8mb4) character set
+  </Accordion>
+
+  <Accordion title="Web Server Requirements">
+    **Supported Web Servers:**
+    - Apache 2.4+ (with mod_rewrite)
+    - Nginx 1.18+
+    - PHP built-in server (development only)
+
+    **Additional Requirements:**
+    - HTTPS/SSL certificate (required for production)
+    - Minimum 512MB RAM
+    - 100MB disk space
+  </Accordion>
+</AccordionGroup>
+
+## Installation Methods
+
+<Tabs>
+  <Tab title="PostgreSQL Setup">
+    ### PostgreSQL Installation
+
+    <Steps>
+      <Step title="Install PostgreSQL">
+        <CodeGroup>
+          ```bash Ubuntu/Debian
+          sudo apt update
+          sudo apt install postgresql postgresql-contrib
+          sudo systemctl start postgresql
+          sudo systemctl enable postgresql
+          ```
+
+          ```bash CentOS/RHEL
+          sudo yum install postgresql-server postgresql-contrib
+          sudo postgresql-setup initdb
+          sudo systemctl start postgresql
+          sudo systemctl enable postgresql
+          ```
+
+          ```bash macOS (Homebrew)
+          brew install postgresql
+          brew services start postgresql
+          ```
+
+          ```powershell Windows
+          # Download installer from postgresql.org
+          # Or use Chocolatey:
+          choco install postgresql
+          ```
+        </CodeGroup>
+      </Step>
+
+      <Step title="Create Database and User">
+        Connect to PostgreSQL:
+
+        ```bash
+        sudo -u postgres psql
+        ```
+
+        Create the database and user:
+
+        ```sql
+        -- Create database
+        CREATE DATABASE refugio WITH ENCODING 'UTF8';
+
+        -- Create user with strong password
+        CREATE USER refugio_user WITH ENCRYPTED PASSWORD 'your_secure_password_here';
+
+        -- Grant privileges
+        GRANT ALL PRIVILEGES ON DATABASE refugio TO refugio_user;
+
+        -- Connect to the database
+        \c refugio
+
+        -- Grant schema privileges
+        GRANT ALL ON SCHEMA public TO refugio_user;
+
+        -- Exit
+        \q
+        ```
+
+        <Warning>
+          Replace `your_secure_password_here` with a strong, unique password. Store it securely!
+        </Warning>
+      </Step>
+
+      <Step title="Import Database Schema">
+        Import the PostgreSQL schema file:
+
+        ```bash
+        psql -U refugio_user -d refugio -f sql/refugio.sql
+        ```
+
+        Verify tables were created:
+
+        ```bash
+        psql -U refugio_user -d refugio -c "\dt"
+        ```
+
+        Expected output:
+        ```
+                      List of relations
+         Schema |     Name      | Type  |    Owner
+        --------+---------------+-------+--------------
+         public | acompanantes  | table | refugio_user
+         public | camas         | table | refugio_user
+         public | habitaciones  | table | refugio_user
+         public | reservas      | table | refugio_user
+         public | usuarios      | table | refugio_user
+        ```
+      </Step>
+
+      <Step title="Configure PostgreSQL Access">
+        Edit `pg_hba.conf` for secure access:
+
+        ```bash
+        # Find config file location
+        sudo -u postgres psql -c "SHOW hba_file;"
+
+        # Edit the file
+        sudo nano /etc/postgresql/14/main/pg_hba.conf
+        ```
+
+        Add or modify:
+
+        ```conf
+        # TYPE  DATABASE    USER            ADDRESS         METHOD
+        local   refugio     refugio_user                    md5
+        host    refugio     refugio_user    127.0.0.1/32   md5
+        host    refugio     refugio_user    ::1/128        md5
+        ```
+
+        Restart PostgreSQL:
+
+        ```bash
+        sudo systemctl restart postgresql
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="MySQL Setup">
+    ### MySQL Installation
+
+    <Steps>
+      <Step title="Install MySQL">
+        <CodeGroup>
+          ```bash Ubuntu/Debian
+          sudo apt update
+          sudo apt install mysql-server
+          sudo systemctl start mysql
+          sudo systemctl enable mysql
+          sudo mysql_secure_installation
+          ```
+
+          ```bash CentOS/RHEL
+          sudo yum install mysql-server
+          sudo systemctl start mysqld
+          sudo systemctl enable mysqld
+          sudo mysql_secure_installation
+          ```
+
+          ```bash macOS (Homebrew)
+          brew install mysql
+          brew services start mysql
+          mysql_secure_installation
+          ```
+
+          ```powershell Windows
+          # Download installer from mysql.com
+          # Or use Chocolatey:
+          choco install mysql
+          ```
+        </CodeGroup>
+      </Step>
+
+      <Step title="Create Database and User">
+        Connect to MySQL:
+
+        ```bash
+        sudo mysql -u root -p
+        ```
+
+        Create the database and user:
+
+        ```sql
+        -- Create database with UTF-8 support
+        CREATE DATABASE refugio CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+        -- Create user
+        CREATE USER 'refugio_user'@'localhost' IDENTIFIED BY 'your_secure_password_here';
+
+        -- Grant privileges
+        GRANT ALL PRIVILEGES ON refugio.* TO 'refugio_user'@'localhost';
+
+        -- Apply changes
+        FLUSH PRIVILEGES;
+
+        -- Exit
+        EXIT;
+        ```
+      </Step>
+
+      <Step title="Import Database Schema">
+        Import the MySQL schema:
+
+        ```bash
+        mysql -u refugio_user -p refugio < sql/refugio_mysql.sql
+        ```
+
+        Verify tables:
+
+        ```bash
+        mysql -u refugio_user -p refugio -e "SHOW TABLES;"
+        ```
+
+        Expected output:
+        ```
+        +-------------------+
+        | Tables_in_refugio |
+        +-------------------+
+        | acompanantes      |
+        | camas             |
+        | habitaciones      |
+        | reservas          |
+        | usuarios          |
+        +-------------------+
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## PHP Configuration
+
+### Required PHP Settings
+
+Edit your `php.ini` file:
+
+```ini php.ini
+; Basic Settings
+max_execution_time = 300
+memory_limit = 256M
+post_max_size = 20M
+upload_max_filesize = 20M
+
+; Session Configuration
+session.cookie_httponly = 1
+session.cookie_secure = 1    ; Requires HTTPS
+session.use_strict_mode = 1
+session.cookie_samesite = "Strict"
+
+; Error Handling (Production)
+display_errors = Off
+display_startup_errors = Off
+error_reporting = E_ALL
+log_errors = On
+error_log = /var/log/php/error.log
+
+; Security
+allow_url_fopen = Off
+allow_url_include = Off
+expose_php = Off
+```
+
+<Info>
+  Find your `php.ini` location with: `php --ini`
+</Info>
+
+### Enable Required Extensions
+
+<CodeGroup>
+  ```bash Ubuntu/Debian
+  sudo apt install php-pdo php-pgsql php-mbstring php-json
+  sudo systemctl restart apache2  # or nginx
+  ```
+
+  ```bash CentOS/RHEL
+  sudo yum install php-pdo php-pgsql php-mbstring php-json
+  sudo systemctl restart httpd
+  ```
+</CodeGroup>
+
+## Application Setup
+
+<Steps>
+  <Step title="Download Refugio">
+    Clone or download the Refugio repository:
+
+    ```bash
+    cd /var/www
+    sudo git clone https://github.com/yourusername/refugio.git
+    cd refugio
+    ```
+
+    Or download and extract:
+
+    ```bash
+    wget https://github.com/yourusername/refugio/archive/main.zip
+    unzip main.zip
+    sudo mv refugio-main /var/www/refugio
+    cd /var/www/refugio
+    ```
+  </Step>
+
+  <Step title="Set File Permissions">
+    Set appropriate permissions:
+
+    ```bash
+    # Set ownership
+    sudo chown -R www-data:www-data /var/www/refugio
+
+    # Set directory permissions
+    sudo find /var/www/refugio -type d -exec chmod 755 {} \;
+
+    # Set file permissions
+    sudo find /var/www/refugio -type f -exec chmod 644 {} \;
+
+    # Make uploads directory writable
+    sudo chmod 775 /var/www/refugio/uploads
+    ```
+
+    <Note>
+      Replace `www-data` with your web server user (e.g., `apache`, `nginx`, `_www`).
+    </Note>
+  </Step>
+
+  <Step title="Configure Database Connection">
+    Create the database connection file:
+
+    ```bash
+    sudo nano /var/www/refugio/conexion.php
+    ```
+
+    <Tabs>
+      <Tab title="PostgreSQL Configuration">
+        ```php conexion.php
+        <?php
+        session_start();
+
+        // PostgreSQL Production Configuration
+        $host = 'localhost';
+        $port = '5432';
+        $dbname = 'refugio';
+        $user = 'refugio_user';
+        $password = 'your_secure_password_here';
+
+        try {
+            $dsn = "pgsql:host=$host;port=$port;dbname=$dbname";
+            $conexionPDO = new PDO($dsn, $user, $password, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+                PDO::ATTR_PERSISTENT => false, // Set to true for connection pooling
+            ]);
+        } catch (PDOException $e) {
+            // Log error securely, don't display database details
+            error_log("Database connection failed: " . $e->getMessage());
+            die("Unable to connect to database. Please contact support.");
+        }
+        ?>
+        ```
+      </Tab>
+
+      <Tab title="MySQL Configuration">
+        ```php conexion.php
+        <?php
+        session_start();
+
+        // MySQL Production Configuration
+        $host = 'localhost';
+        $port = '3306';
+        $dbname = 'refugio';
+        $user = 'refugio_user';
+        $password = 'your_secure_password_here';
+        $charset = 'utf8mb4';
+
+        try {
+            $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=$charset";
+            $conexionPDO = new PDO($dsn, $user, $password, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+                PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
+            ]);
+        } catch (PDOException $e) {
+            error_log("Database connection failed: " . $e->getMessage());
+            die("Unable to connect to database. Please contact support.");
+        }
+        ?>
+        ```
+      </Tab>
+    </Tabs>
+
+    <Warning>
+      Ensure `conexion.php` is NOT accessible via web browser. It's already in `.gitignore`.
+    </Warning>
+
+    Set secure permissions:
+
+    ```bash
+    sudo chmod 600 /var/www/refugio/conexion.php
+    sudo chown www-data:www-data /var/www/refugio/conexion.php
+    ```
+  </Step>
+
+  <Step title="Update Default Passwords">
+    **Critical:** Change the default user passwords immediately.
+
+    Option 1: Use the admin panel after first login
+
+    Option 2: Update directly in database:
+
+    ```php generate_password.php
+    <?php
+    // Run this once to generate new password hashes
+    echo password_hash('new_admin_password', PASSWORD_BCRYPT) . "\n";
+    echo password_hash('new_user_password', PASSWORD_BCRYPT) . "\n";
+    ?>
+    ```
+
+    ```bash
+    php generate_password.php
+    ```
+
+    Then update in database:
+
+    ```sql
+    UPDATE usuarios SET password = '$2y$10$...' WHERE email = 'admin@hostel.com';
+    ```
+
+    <Warning>
+      Delete `generate_password.php` after use!
+    </Warning>
+  </Step>
+</Steps>
+
+## Web Server Configuration
+
+<Tabs>
+  <Tab title="Apache Configuration">
+    ### Apache Setup
+
+    Create a virtual host configuration:
+
+    ```bash
+    sudo nano /etc/apache2/sites-available/refugio.conf
+    ```
+
+    ```apache refugio.conf
+    <VirtualHost *:80>
+        ServerName refugio.yourdomain.com
+        ServerAdmin admin@yourdomain.com
+        DocumentRoot /var/www/refugio
+
+        # Redirect all HTTP to HTTPS
+        RewriteEngine On
+        RewriteCond %{HTTPS} off
+        RewriteRule ^(.*)$ https://%{HTTP_HOST}$1 [R=301,L]
+    </VirtualHost>
+
+    <VirtualHost *:443>
+        ServerName refugio.yourdomain.com
+        ServerAdmin admin@yourdomain.com
+        DocumentRoot /var/www/refugio
+
+        # SSL Configuration
+        SSLEngine on
+        SSLCertificateFile /path/to/certificate.crt
+        SSLCertificateKeyFile /path/to/private.key
+        SSLCertificateChainFile /path/to/chain.crt
+
+        # Security Headers
+        Header always set X-Frame-Options "SAMEORIGIN"
+        Header always set X-Content-Type-Options "nosniff"
+        Header always set X-XSS-Protection "1; mode=block"
+        Header always set Referrer-Policy "strict-origin-when-cross-origin"
+        Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+
+        <Directory /var/www/refugio>
+            Options -Indexes +FollowSymLinks
+            AllowOverride All
+            Require all granted
+
+            # PHP Settings
+            php_flag display_errors Off
+            php_value error_log /var/log/apache2/refugio_errors.log
+        </Directory>
+
+        # Protect sensitive files
+        <FilesMatch "^(conexion\.php|config\.php|.*\.sql)$">
+            Require all denied
+        </FilesMatch>
+
+        # Logs
+        ErrorLog ${APACHE_LOG_DIR}/refugio_error.log
+        CustomLog ${APACHE_LOG_DIR}/refugio_access.log combined
+    </VirtualHost>
+    ```
+
+    Enable the site and required modules:
+
+    ```bash
+    sudo a2enmod rewrite ssl headers
+    sudo a2ensite refugio.conf
+    sudo systemctl restart apache2
+    ```
+
+    The included `.htaccess` file provides additional security:
+
+    ```apache .htaccess
+    # Disable directory browsing
+    Options -Indexes
+
+    # Protect sensitive files
+    <FilesMatch "\.(sql|log|md|gitignore)$">
+        Require all denied
+    </FilesMatch>
+
+    # Enable rewrite engine
+    RewriteEngine On
+
+    # Force HTTPS
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}/$1 [R=301,L]
+    ```
+  </Tab>
+
+  <Tab title="Nginx Configuration">
+    ### Nginx Setup
+
+    Create a server block:
+
+    ```bash
+    sudo nano /etc/nginx/sites-available/refugio
+    ```
+
+    ```nginx refugio
+    # Redirect HTTP to HTTPS
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name refugio.yourdomain.com;
+        return 301 https://$server_name$request_uri;
+    }
+
+    # HTTPS Server Block
+    server {
+        listen 443 ssl http2;
+        listen [::]:443 ssl http2;
+        server_name refugio.yourdomain.com;
+
+        root /var/www/refugio;
+        index index.php login.php;
+
+        # SSL Configuration
+        ssl_certificate /path/to/certificate.crt;
+        ssl_certificate_key /path/to/private.key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers on;
+
+        # Security Headers
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-XSS-Protection "1; mode=block" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+        # Logging
+        access_log /var/log/nginx/refugio_access.log;
+        error_log /var/log/nginx/refugio_error.log;
+
+        # Deny access to sensitive files
+        location ~ ^/(conexion\.php|config\.php|.*\.sql|\.git) {
+            deny all;
+            return 404;
+        }
+
+        # Deny access to hidden files
+        location ~ /\. {
+            deny all;
+            return 404;
+        }
+
+        # PHP Processing
+        location ~ \.php$ {
+            include snippets/fastcgi-php.conf;
+            fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            include fastcgi_params;
+        }
+
+        # Default location
+        location / {
+            try_files $uri $uri/ =404;
+        }
+
+        # Deny access to uploads except images
+        location ~* ^/uploads/.*\.(jpg|jpeg|png|gif)$ {
+            allow all;
+        }
+
+        location ^~ /uploads/ {
+            deny all;
+            return 404;
+        }
+    }
+    ```
+
+    Enable the site:
+
+    ```bash
+    sudo ln -s /etc/nginx/sites-available/refugio /etc/nginx/sites-enabled/
+    sudo nginx -t
+    sudo systemctl restart nginx
+    ```
+  </Tab>
+</Tabs>
+
+## SSL/TLS Certificate Setup
+
+### Using Let's Encrypt (Recommended)
+
+```bash
+# Install Certbot
+sudo apt install certbot python3-certbot-apache  # For Apache
+# OR
+sudo apt install certbot python3-certbot-nginx   # For Nginx
+
+# Obtain certificate
+sudo certbot --apache -d refugio.yourdomain.com   # For Apache
+# OR
+sudo certbot --nginx -d refugio.yourdomain.com    # For Nginx
+
+# Auto-renewal is configured automatically
+# Test renewal:
+sudo certbot renew --dry-run
+```
+
+## Post-Installation Steps
+
+<Steps>
+  <Step title="Verify Installation">
+    Run the verification script:
+
+    ```bash
+    php verificar_mysql.php
+    ```
+
+    Expected output:
+    ```
+    ==============================================
+       VERIFICACIÓN DE CONFIGURACIÓN MYSQL
+    ==============================================
+
+    TEST 1: Verificando conexión a MySQL...
+    ✓ Conexión a MySQL establecida correctamente
+    ✓ Versión de MySQL: 8.0.x
+
+    TEST 2: Verificando base de datos 'refugio'...
+    ✓ Base de datos 'refugio' seleccionada correctamente
+
+    TEST 3: Verificando tablas del sistema...
+    ✓ Tabla 'usuarios' existe
+    ✓ Tabla 'habitaciones' existe
+    ✓ Tabla 'camas' existe
+    ✓ Tabla 'reservas' existe
+    ✓ Tabla 'acompanantes' existe
+    ```
+
+    <Check>
+      All tests should show green checkmarks.
+    </Check>
+  </Step>
+
+  <Step title="Secure the Installation">
+    Remove development files:
+
+    ```bash
+    sudo rm /var/www/refugio/verificar_mysql.php
+    sudo rm /var/www/refugio/generar_hashes.php
+    sudo rm -rf /var/www/refugio/.git
+    sudo rm /var/www/refugio/.gitignore
+    ```
+
+    Verify file permissions:
+
+    ```bash
+    ls -la /var/www/refugio/conexion.php
+    # Should show: -rw------- (600)
+    ```
+  </Step>
+
+  <Step title="Configure Backups">
+    Set up automated database backups:
+
+    ```bash backup_refugio.sh
+    #!/bin/bash
+    # Refugio Database Backup Script
+
+    BACKUP_DIR="/var/backups/refugio"
+    DATE=$(date +%Y%m%d_%H%M%S)
+    DB_NAME="refugio"
+    DB_USER="refugio_user"
+
+    # Create backup directory
+    mkdir -p $BACKUP_DIR
+
+    # PostgreSQL backup
+    PGPASSWORD='your_password' pg_dump -U $DB_USER $DB_NAME > \
+        "$BACKUP_DIR/refugio_$DATE.sql"
+
+    # Compress backup
+    gzip "$BACKUP_DIR/refugio_$DATE.sql"
+
+    # Delete backups older than 30 days
+    find $BACKUP_DIR -name "*.sql.gz" -mtime +30 -delete
+
+    echo "Backup completed: refugio_$DATE.sql.gz"
+    ```
+
+    Make executable and schedule:
+
+    ```bash
+    sudo chmod +x /usr/local/bin/backup_refugio.sh
+    sudo crontab -e
+    ```
+
+    Add cron job (daily at 2 AM):
+
+    ```cron
+    0 2 * * * /usr/local/bin/backup_refugio.sh >> /var/log/refugio_backup.log 2>&1
+    ```
+  </Step>
+
+  <Step title="Test the Application">
+    Access your installation:
+
+    ```
+    https://refugio.yourdomain.com
+    ```
+
+    Test admin login:
+    - Email: `admin@hostel.com`
+    - Password: (your updated password)
+
+    Verify:
+    - ✓ HTTPS is working
+    - ✓ Login redirects properly
+    - ✓ Admin dashboard loads
+    - ✓ Database queries work
+    - ✓ Session management functions
+  </Step>
+</Steps>
+
+## Monitoring and Maintenance
+
+### Log Files to Monitor
+
+```bash
+# Apache logs
+tail -f /var/log/apache2/refugio_error.log
+
+# Nginx logs
+tail -f /var/log/nginx/refugio_error.log
+
+# PHP error log
+tail -f /var/log/php/error.log
+
+# PostgreSQL logs
+tail -f /var/log/postgresql/postgresql-14-main.log
+```
+
+### Performance Optimization
+
+<Accordion title="Enable PHP OPcache">
+  Add to `php.ini`:
+
+  ```ini
+  opcache.enable=1
+  opcache.memory_consumption=128
+  opcache.interned_strings_buffer=8
+  opcache.max_accelerated_files=4000
+  opcache.revalidate_freq=60
+  ```
+</Accordion>
+
+<Accordion title="Database Connection Pooling">
+  In `conexion.php`, enable persistent connections:
+
+  ```php
+  PDO::ATTR_PERSISTENT => true,
+  ```
+
+  Configure PostgreSQL connection pooling with PgBouncer for high-traffic sites.
+</Accordion>
+
+<Accordion title="Enable Gzip Compression">
+  Apache:
+  ```bash
+  sudo a2enmod deflate
+  sudo systemctl restart apache2
+  ```
+
+  Nginx:
+  ```nginx
+  gzip on;
+  gzip_types text/plain text/css application/json application/javascript;
+  ```
+</Accordion>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="500 Internal Server Error">
+    **Causes:**
+    - PHP syntax errors
+    - Incorrect file permissions
+    - Missing PHP extensions
+    - Database connection failure
+
+    **Solutions:**
+    ```bash
+    # Check Apache error log
+    sudo tail -50 /var/log/apache2/refugio_error.log
+
+    # Check PHP syntax
+    php -l /var/www/refugio/index.php
+
+    # Verify permissions
+    ls -la /var/www/refugio/
+
+    # Test database connection
+    php -r "require 'conexion.php'; echo 'Connection OK';"
+    ```
+  </Accordion>
+
+  <Accordion title="Database Connection Errors">
+    **Error:** `SQLSTATE[08006] could not connect to server`
+
+    **Solutions:**
+    ```bash
+    # Check if PostgreSQL is running
+    sudo systemctl status postgresql
+
+    # Verify connection settings
+    sudo -u postgres psql -c "SELECT version();"
+
+    # Check pg_hba.conf authentication
+    sudo cat /etc/postgresql/14/main/pg_hba.conf
+
+    # Test connection manually
+    psql -h localhost -U refugio_user -d refugio
+    ```
+  </Accordion>
+
+  <Accordion title="Session Issues">
+    **Error:** Session warnings or login loops
+
+    **Solutions:**
+    ```bash
+    # Check session directory exists and is writable
+    ls -ld /var/lib/php/sessions
+    sudo chmod 1733 /var/lib/php/sessions
+
+    # Verify session settings in php.ini
+    php -i | grep session
+
+    # Check for session cookie settings
+    grep -r "session_" /etc/php/*/apache2/php.ini
+    ```
+  </Accordion>
+
+  <Accordion title="File Upload Issues">
+    **Error:** Failed to upload profile photos
+
+    **Solutions:**
+    ```bash
+    # Check uploads directory permissions
+    ls -ld /var/www/refugio/uploads
+    sudo chmod 775 /var/www/refugio/uploads
+    sudo chown www-data:www-data /var/www/refugio/uploads
+
+    # Check PHP upload settings
+    php -i | grep -E "upload_max_filesize|post_max_size"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Security Hardening Checklist
+
+<Check>HTTPS enabled with valid SSL certificate</Check>
+<Check>All default passwords changed</Check>
+<Check>File permissions correctly set (644 for files, 755 for directories)</Check>
+<Check>`conexion.php` has 600 permissions</Check>
+<Check>PHP `display_errors` is Off in production</Check>
+<Check>Error logs are monitored regularly</Check>
+<Check>Database user has minimal required privileges</Check>
+<Check>Firewall configured (UFW/firewalld)</Check>
+<Check>Regular backups scheduled and tested</Check>
+<Check>Development files removed from production</Check>
+<Check>Security headers configured in web server</Check>
+<Check>SQL injection protection verified (using PDO)</Check>
+<Check>XSS protection enabled (using htmlspecialchars)</Check>
+<Check>Session cookies use HttpOnly and Secure flags</Check>
+
+## Upgrade Path
+
+When updating Refugio:
+
+```bash
+# 1. Backup everything
+sudo /usr/local/bin/backup_refugio.sh
+sudo tar -czf /var/backups/refugio_files_$(date +%Y%m%d).tar.gz /var/www/refugio
+
+# 2. Download new version
+cd /tmp
+git clone https://github.com/yourusername/refugio.git refugio-new
+
+# 3. Backup current conexion.php
+sudo cp /var/www/refugio/conexion.php /tmp/conexion.php.bak
+
+# 4. Update files
+sudo rsync -av --exclude='conexion.php' --exclude='uploads/' \
+    /tmp/refugio-new/ /var/www/refugio/
+
+# 5. Run database migrations (if any)
+php /var/www/refugio/migrate.php
+
+# 6. Clear cache if applicable
+sudo systemctl restart apache2  # or nginx
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Customize Refugio settings and preferences
+  </Card>
+  <Card title="User Guide" icon="book" href="/user-guide">
+    Learn how to use all features effectively
+  </Card>
+  <Card title="API Documentation" icon="code" href="/api-reference">
+    Explore the functions and endpoints available
+  </Card>
+  <Card title="Backup & Recovery" icon="database" href="/backup-recovery">
+    Set up comprehensive backup strategies
+  </Card>
+</CardGroup>
+
+---
+
+**Your Refugio installation is complete and secure!** Monitor logs regularly and keep the system updated. 🏔️

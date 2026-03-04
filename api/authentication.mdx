@@ -1,0 +1,65 @@
+---
+title: Authentication
+description: Authentication functions for the Refugio system
+---
+
+## Overview
+
+Authentication functions handle user verification and login processes in the Refugio mountain refuge reservation system.
+
+## Functions
+
+### comprobar_username
+
+Verifies a user by their email address and retrieves their account information.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="email" type="string" required>
+  User's email address to verify
+</ParamField>
+
+<ResponseField name="return" type="array|false">
+  Returns user data array on success, false on failure. User array contains:
+  - `id` - User ID
+  - `email` - User email
+  - `password` - Hashed password
+  - `rol` - User role
+  - `nombre` - First name
+  - `apellido1` - First surname
+</ResponseField>
+
+#### SQL Query
+
+```sql
+SELECT id, email, password, rol, nombre, apellido1 
+FROM usuarios 
+WHERE email = :email
+```
+
+#### Code Example
+
+```php
+$email = 'user@example.com';
+$user = comprobar_username($conexion, $email);
+
+if ($user) {
+    if (password_verify($password_input, $user['password'])) {
+        // Login successful
+        $_SESSION['user_id'] = $user['id'];
+        $_SESSION['rol'] = $user['rol'];
+    }
+} else {
+    // User not found
+}
+```
+
+#### Error Handling
+
+Errors are logged to the error log and the function returns `false`:
+
+```php
+error_log("Error al comprobar usuario: " . $e->getMessage());
+```

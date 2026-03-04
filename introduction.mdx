@@ -1,0 +1,170 @@
+---
+title: Introduction to Refugio
+description: A comprehensive mountain refuge bed reservation management system designed for mountain huts, hostels, and climbing clubs
+---
+
+# Welcome to Refugio
+
+Refugio is a complete web-based reservation management system specifically designed for mountain refuges and hostels. It streamlines bed management, user reservations, and administrative tasks with a modern, intuitive interface.
+
+## What is Refugio?
+
+Refugio is a PHP-based SaaS application that provides mountain refuge administrators with powerful tools to manage bed reservations, while giving members an easy-to-use interface to check availability and make bookings in real-time.
+
+<Note>
+  Refugio supports both PostgreSQL and MySQL databases, giving you flexibility in your infrastructure choices.
+</Note>
+
+## Who is Refugio For?
+
+This system is ideal for:
+
+- **Mountain Refuges** that need to manage bed reservations efficiently
+- **Climbing Clubs** with their own mountain huts
+- **Hostels** requiring a simple yet powerful reservation system
+- **Organizations** managing shared spaces with a membership system
+
+## Key Features
+
+### For Administrators
+
+<CardGroup cols={2}>
+  <Card title="User Management" icon="users">
+    Complete CRUD operations for managing club members and their profiles
+  </Card>
+  <Card title="Reservation Approval" icon="check-circle">
+    Review and approve/reject pending reservations with a streamlined workflow
+  </Card>
+  <Card title="Room Management" icon="bed">
+    Control rooms and beds with real-time occupancy status tracking
+  </Card>
+  <Card title="Dashboard Analytics" icon="chart-line">
+    View statistics and metrics about bookings, occupancy, and member activity
+  </Card>
+</CardGroup>
+
+### For Members
+
+<CardGroup cols={2}>
+  <Card title="Interactive Calendar" icon="calendar">
+    Visual availability calendar showing available beds in real-time
+  </Card>
+  <Card title="Easy Booking" icon="hand-pointer">
+    Simple reservation form with dynamic bed selection
+  </Card>
+  <Card title="Companion Management" icon="user-group">
+    Add companions (members and non-members) to your reservations
+  </Card>
+  <Card title="My Reservations" icon="list">
+    View and manage your pending and confirmed bookings
+  </Card>
+</CardGroup>
+
+## Technology Stack
+
+| Category | Technology | Version |
+|----------|-----------|----------|
+| Backend | PHP | 7.4+ |
+| Database (Primary) | PostgreSQL | 12+ |
+| Database (Alternative) | MySQL | 5.7+ |
+| Frontend | HTML5 + CSS3 | - |
+| CSS Framework | Bootstrap | 5.3.2 |
+| Icons | Bootstrap Icons | 1.11.1 |
+| JavaScript | Vanilla JS | ES6+ |
+| Security | PDO + password_hash | - |
+
+## Architecture Overview
+
+Refugio follows a three-tier architecture:
+
+```
+┌─────────────────────────────────────┐
+│      PRESENTATION LAYER             │
+│  (viewAdmin.php, viewSocio.php)     │
+└─────────────────────────────────────┘
+               ↓
+┌─────────────────────────────────────┐
+│      BUSINESS LOGIC LAYER           │
+│      (functions.php)                │
+└─────────────────────────────────────┘
+               ↓
+┌─────────────────────────────────────┐
+│      DATA ACCESS LAYER              │
+│      (conexion.php + PDO)           │
+└─────────────────────────────────────┘
+               ↓
+┌─────────────────────────────────────┐
+│      DATABASE                       │
+│      (PostgreSQL / MySQL)           │
+└─────────────────────────────────────┘
+```
+
+## Database Schema
+
+The system uses 5 core tables:
+
+- **usuarios** - User accounts with roles (admin/user)
+- **habitaciones** - Room definitions with capacity
+- **camas** - Individual bed records with occupancy status
+- **reservas** - Reservation records with approval workflow
+- **acompanantes** - Companion information for multi-bed bookings
+
+## Security Features
+
+Refugio implements multiple security layers:
+
+<Check>Bcrypt password hashing with `password_hash()`</Check>
+<Check>PDO prepared statements to prevent SQL injection</Check>
+<Check>Input sanitization with `htmlspecialchars()`</Check>
+<Check>XSS protection on all user inputs</Check>
+<Check>Session ID regeneration to prevent session fixation</Check>
+<Check>HttpOnly cookies for enhanced security</Check>
+<Check>Role-based access control (RBAC)</Check>
+<Check>Secure logout mechanism</Check>
+
+<Warning>
+  For production deployment, ensure you enable HTTPS, implement CSRF tokens, and configure rate limiting.
+</Warning>
+
+## Project Statistics
+
+- **PHP Files:** 10+
+- **Functions:** 30+
+- **Lines of Code:** ~3,500
+- **Database Tables:** 5
+- **Default Rooms:** 4
+- **Total Bed Capacity:** 26 beds
+- **Reservation States:** 3 (pending, approved, cancelled)
+
+## Default User Accounts
+
+The system comes with test accounts for immediate evaluation:
+
+| Role | Email | Password | Member # |
+|------|-------|----------|----------|
+| Admin | admin@hostel.com | admin123 | A001 |
+| User | user1@mail.com | user123 | U001 |
+| User | user2@mail.com | user123 | U002 |
+
+<Warning>
+  Change these default passwords immediately after installation, especially before production deployment!
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get Refugio running in minutes with our quick start guide
+  </Card>
+  <Card title="Installation Guide" icon="download" href="/installation">
+    Detailed installation instructions for production deployment
+  </Card>
+</CardGroup>
+
+## Support
+
+For questions, issues, or contributions, please refer to the project documentation or contact the development team.
+
+---
+
+**Ready to manage your mountain refuge efficiently? Let's get started!** 🏔️

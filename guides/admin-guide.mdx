@@ -1,0 +1,397 @@
+---
+title: 'Administrator Guide'
+description: 'Complete guide for administrators managing the Refugio reservation system'
+---
+
+# Administrator Guide
+
+This guide covers all administrative functions for managing the mountain refuge reservation system, including user management, reservation approval, and dashboard monitoring.
+
+## Getting Started
+
+### Accessing the Admin Panel
+
+<Steps>
+  <Step title="Login to the system">
+    Navigate to `login.php` and enter your administrator credentials:
+    - Email: Your admin email address
+    - Password: Your admin password
+    
+    The system uses secure password hashing with bcrypt and regenerates session IDs to prevent session fixation attacks.
+  </Step>
+  
+  <Step title="Access the dashboard">
+    After successful login, you'll be redirected to `viewAdmin.php` where you can access:
+    - Dashboard (overview and calendar)
+    - User Management
+    - Reservation Management
+  </Step>
+</Steps>
+
+<Note>
+  The main admin user (`admin@hostel.com`) cannot be modified or deleted to ensure system access is always available.
+</Note>
+
+## Dashboard Overview
+
+The dashboard provides a comprehensive view of the refuge's current status.
+
+### Key Statistics
+
+The dashboard displays three main statistics cards:
+
+<CardGroup cols={3}>
+  <Card title="Total Rooms" icon="door-open">
+    Shows the total number of rooms in the refuge
+  </Card>
+  <Card title="Pending Reservations" icon="hourglass">
+    Number of reservations awaiting approval
+  </Card>
+  <Card title="Total Beds" icon="bed">
+    Total bed capacity (26 beds)
+  </Card>
+</CardGroup>
+
+### Calendar View
+
+The calendar shows a monthly overview with color-coded indicators:
+
+- **Yellow background**: Days with pending reservations
+- **Green background**: Days with approved reservations
+- **Blue gradient**: Days with both pending and approved reservations
+- **White**: Days with no reservations
+- **Gray**: Past days
+
+**Navigation**: Use the "Anterior" and "Siguiente" buttons to move between months.
+
+**Bed Availability**: Each day shows:
+- Number of free beds vs. total beds (e.g., "15/26 libres")
+- Number of pending reservations
+- Number of approved reservations
+
+### Pending Reservations Section
+
+Below the calendar, you'll see a table of all pending reservations requiring approval.
+
+**For each reservation, you can see**:
+- Requester name and email
+- Room number
+- Number of beds
+- Check-in and check-out dates
+- Request date and time
+
+**Available actions**:
+- **Approve**: Click the green "Aprobar" button to approve the reservation
+- **Reject**: Click the red "Rechazar" button to reject and cancel the reservation
+
+<Warning>
+  Approving a reservation is immediate and cannot be undone except by canceling the reservation. Rejecting a reservation marks it as canceled.
+</Warning>
+
+### Room Status
+
+The dashboard also displays the current occupancy status for each room with:
+- Progress bar showing available beds
+- Color coding: green (more than 50% available), yellow (20-50% available), red (less than 20% available)
+
+## User Management
+
+Access user management by clicking **Usuarios** in the sidebar.
+
+### Viewing Users
+
+The user list displays:
+- Member number (Nº Socio)
+- Full name
+- Email address
+- Phone number
+- DNI
+- Role (Admin or User)
+
+**Features**:
+- **Search**: Use the search box to find users by name, email, DNI, or member number
+- **Sort**: Click column headers or use the sort dropdown to organize users
+- **Pagination**: Navigate through pages if you have more than 10 users
+
+### Creating a New User
+
+<Steps>
+  <Step title="Click 'Nuevo Usuario'">
+    Click the blue "Nuevo Usuario" button in the top-right corner
+  </Step>
+  
+  <Step title="Fill in user details">
+    In the modal form, enter:
+    - **Nº Socio**: Member number (required)
+    - **DNI**: National ID number (required)
+    - **Teléfono**: Phone number (required)
+    - **Email**: Email address (required, must be unique)
+    - **Nombre**: First name (required)
+    - **Apellido 1**: First surname (required)
+    - **Apellido 2**: Second surname (optional)
+    - **Contraseña**: Password (required, min 6 characters recommended)
+    - **Rol**: Select either "user" or "admin"
+  </Step>
+  
+  <Step title="Submit the form">
+    Click "Crear Usuario" to create the account
+  </Step>
+</Steps>
+
+<Note>
+  Passwords are automatically hashed using bcrypt (PASSWORD_BCRYPT) before storage. Users will receive a success message upon creation.
+</Note>
+
+### Editing a User
+
+<Steps>
+  <Step title="Click the edit button">
+    In the user list, click the pencil icon next to the user you want to edit
+  </Step>
+  
+  <Step title="Modify user details">
+    Update any field as needed. Leave the password field empty to keep the current password unchanged.
+  </Step>
+  
+  <Step title="Save changes">
+    Click "Actualizar Usuario" to save your changes
+  </Step>
+</Steps>
+
+<Warning>
+  The main administrator account (`admin@hostel.com`) cannot be edited to prevent accidental lockout from the system.
+</Warning>
+
+### Deleting a User
+
+<Steps>
+  <Step title="Locate the user">
+    Find the user in the user list
+  </Step>
+  
+  <Step title="Click delete">
+    Click the red trash icon button
+  </Step>
+  
+  <Step title="Confirm deletion">
+    Confirm the deletion in the popup dialog
+  </Step>
+</Steps>
+
+<Warning>
+  - The main administrator cannot be deleted
+  - Deleting a user is permanent and cannot be undone
+  - Consider the impact on existing reservations before deleting a user
+</Warning>
+
+### Exporting Users
+
+Click the **"Exportar CSV"** button to download a CSV file containing all user data with current filters and sorting applied.
+
+**CSV includes**: Member number, name, surnames, DNI, email, phone, and role.
+
+## Reservation Management
+
+Access reservation management by clicking **Reservas** in the sidebar.
+
+### Viewing Reservations
+
+Reservations are organized into three tabs:
+
+1. **Pendientes**: Reservations awaiting approval
+2. **Aprobadas**: Confirmed reservations
+3. **Canceladas**: Rejected or canceled reservations
+
+**Each tab shows**:
+- User information (name, email)
+- Room and bed details
+- Check-in and check-out dates
+- Reservation creation date
+- Current status
+
+**Available tools**:
+- **Search**: Filter by user name, email, or member number
+- **Sort**: Order by creation date, check-in date, check-out date, or user name
+- **Pagination**: 5 reservations per page
+
+### Approving Reservations
+
+<Steps>
+  <Step title="Locate the pending reservation">
+    Find the reservation in the "Pendientes" tab
+  </Step>
+  
+  <Step title="Review details">
+    Check the dates, room, and number of beds requested
+  </Step>
+  
+  <Step title="Approve">
+    Click the green "Aprobar" button and confirm
+  </Step>
+</Steps>
+
+The reservation status changes to "reservada" and beds are marked as reserved in the system.
+
+### Rejecting Reservations
+
+<Steps>
+  <Step title="Locate the pending reservation">
+    Find the reservation in the "Pendientes" tab
+  </Step>
+  
+  <Step title="Reject">
+    Click the red "Rechazar" button and confirm
+  </Step>
+</Steps>
+
+The reservation is moved to the "Canceladas" tab and beds are released.
+
+### Editing Reservations
+
+Administrators can modify approved reservations:
+
+<Steps>
+  <Step title="Click the edit button">
+    In the "Aprobadas" tab, click the pencil icon for the reservation
+  </Step>
+  
+  <Step title="Update details">
+    Modify:
+    - Check-in date
+    - Check-out date
+    - Room (if available)
+    - Number of beds (if available)
+  </Step>
+  
+  <Step title="Save changes">
+    Click "Guardar Cambios"
+  </Step>
+</Steps>
+
+<Note>
+  The system automatically checks bed availability when editing. If the requested changes cannot be accommodated, you'll see an error message.
+</Note>
+
+### Canceling Approved Reservations
+
+Click the red "Cancelar" button next to any approved reservation to cancel it. This releases the beds and moves the reservation to the "Canceladas" tab.
+
+### Creating Reservations for Members
+
+Administrators can create pre-approved reservations:
+
+<Steps>
+  <Step title="Click 'Crear Reserva para Socio'">
+    In the Reservas section, look for the creation button
+  </Step>
+  
+  <Step title="Select the member">
+    Choose the user from the dropdown
+  </Step>
+  
+  <Step title="Choose dates and room">
+    - Select check-in date
+    - Select check-out date  
+    - Choose room
+    - Select number of beds
+  </Step>
+  
+  <Step title="Create reservation">
+    Click submit - the reservation is automatically approved
+  </Step>
+</Steps>
+
+### Creating Special Reservations
+
+For events or maintenance, administrators can create special reservations:
+
+<Steps>
+  <Step title="Click 'Crear Reserva Especial'">
+    Access the special reservation form
+  </Step>
+  
+  <Step title="Enter details">
+    - **Motivo**: Reason for the special reservation
+    - **Dates**: Start and end dates
+    - **Room**: Select a specific room or "Todo el Refugio" (entire refuge)
+    - **Beds**: Number of beds to reserve
+  </Step>
+  
+  <Step title="Submit">
+    Click create - the reservation is marked with the reason in observations
+  </Step>
+</Steps>
+
+<Warning>
+  When reserving "Todo el Refugio", ALL beds must be available for the selected dates. The system verifies this before allowing the reservation.
+</Warning>
+
+### Exporting Reservations
+
+Click **"Exportar CSV"** to download reservation data:
+
+**CSV includes**: ID, user info, room, beds, dates, status, and creation date
+
+The export respects current filters and sorting, allowing you to export specific subsets of reservations.
+
+## Best Practices
+
+<Card title="Daily Tasks" icon="calendar-check">
+  - Review pending reservations at least once daily
+  - Check the calendar for upcoming high-occupancy periods
+  - Monitor room availability status
+</Card>
+
+<Card title="Weekly Tasks" icon="calendar-week">
+  - Review approved reservations for the coming weeks
+  - Check for any conflicts or overbookings
+  - Export reservation data for record-keeping
+</Card>
+
+<Card title="User Management" icon="users">
+  - Regularly audit user accounts
+  - Remove inactive users if necessary
+  - Keep member information up to date
+  - Export user lists for backup purposes
+</Card>
+
+## Troubleshooting
+
+### Cannot approve a reservation
+
+**Possible causes**:
+- Not enough beds available in the selected room
+- Dates conflict with an existing reservation
+- The room is already fully booked for those dates
+
+**Solution**: Check the calendar view for the specific dates or try editing the reservation to different dates/rooms.
+
+### User cannot login
+
+**Possible causes**:
+- Incorrect email or password
+- Account not yet created
+- Wrong role assigned
+
+**Solution**: Verify the user exists, reset their password by editing the user, and ensure the correct role is assigned.
+
+### Reservation conflicts
+
+If you see unexpected booking conflicts:
+
+1. Check for special reservations ("Todo el Refugio")
+2. Review all pending reservations for the dates
+3. Verify bed assignments in the database if needed
+4. Consider canceling overlapping reservations and recreating them
+
+## Security Notes
+
+As an administrator, you have access to sensitive data:
+
+- **Never share your admin credentials**
+- **Always log out when finished** using the "Cerrar Sesión" option
+- **Use strong passwords** for all admin accounts
+- **Regularly review user accounts** for suspicious activity
+- **Monitor reservation patterns** for unusual booking behavior
+
+See the [Security Best Practices](/guides/security) guide for more information.

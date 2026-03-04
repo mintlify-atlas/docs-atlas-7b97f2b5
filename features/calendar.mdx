@@ -1,0 +1,630 @@
+---
+title: 'Calendar & Availability'
+description: 'Interactive calendar system showing real-time bed availability and reservations'
+icon: 'calendar-days'
+---
+
+## Overview
+
+The calendar system provides a visual interface for viewing bed availability, managing reservations, and tracking occupancy across different time periods.
+
+## Calendar Views
+
+The system offers two different calendar perspectives:
+
+<CardGroup cols={2}>
+<Card title="Admin Calendar" icon="user-shield">
+  Full occupancy view with pending approvals, approved reservations, and capacity tracking for all rooms
+</Card>
+
+<Card title="User Calendar" icon="user">
+  Personal availability calendar highlighting user's own reservations and available booking dates
+</Card>
+</CardGroup>
+
+## Admin Calendar Implementation
+
+### Monthly Navigation
+
+The admin calendar in `viewAdmin.php:384-411` implements month navigation:
+
+<CodeGroup>
+```php viewAdmin.php - Calendar Navigation
+// Get current or selected month/year
+$mes_actual  = isset($_GET['mes']) ? (int) $_GET['mes'] : (int) date('n');
+$anio_actual = isset($_GET['anio']) ? (int) $_GET['anio'] : (int) date('Y');
+
+// Calculate previous month
+$mes_anterior  = $mes_actual - 1;
+$anio_anterior = $anio_actual;
+if ($mes_anterior < 1) {
+    $mes_anterior = 12;
+    $anio_anterior--;
+}
+
+// Calculate next month
+$mes_siguiente  = $mes_actual + 1;
+$anio_siguiente = $anio_actual;
+if ($mes_siguiente > 12) {
+    $mes_siguiente = 1;
+    $anio_siguiente++;
+}
+
+// Get days in current month
+$primer_dia        = mktime(0, 0, 0, $mes_actual, 1, $anio_actual);
+$dias_en_mes       = date('t', $primer_dia);
+$dia_semana_inicio = date('N', $primer_dia); // 1 = Monday, 7 = Sunday
+```
+</CodeGroup>
+
+### Month Names in Spanish
+
+From `viewAdmin.php:414-422`:
+
+<CodeGroup>
+```php viewAdmin.php - mes_espanol()
+function mes_espanol($mes)
+{
+    $meses = [
+        1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4 => 'Abril',
+        5 => 'Mayo', 6 => 'Junio', 7 => 'Julio', 8 => 'Agosto',
+        9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
+    ];
+    return $meses[(int) $mes];
+}
+```
+</CodeGroup>
+
+### Daily Reservation Count
+
+The calendar queries reservations for each day in `viewAdmin.php:726-746`:
+
+<CodeGroup>
+```php viewAdmin.php - Count Daily Reservations
+for ($dia = 1; $dia <= $dias_en_mes; $dia++) {
+    $fecha_actual = sprintf('%04d-%02d-%02d', $anio_actual, $mes_actual, $dia);
+    $es_pasado = $fecha_actual < $hoy;
+
+    // Count reservations for this day grouped by status
+    $stmt = $conexionPDO->prepare("
+        SELECT estado, COUNT(*) as total
+        FROM reservas
+        WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+        GROUP BY estado
+    ");
+    $stmt->bindParam(':fecha', $fecha_actual);
+    $stmt->execute();
+    $reservas_dia = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $pendientes = 0;
+    $aprobadas = 0;
+    foreach ($reservas_dia as $r) {
+        if ($r['estado'] === 'pendiente') {
+            $pendientes = $r['total'];
+        }
+        if ($r['estado'] === 'reservada') {
+            $aprobadas = $r['total'];
+        }
+    }
+
+    // Count free beds for this day
+    $camas_libres = contar_camas_libres_por_fecha($conexionPDO, $fecha_actual);
+    $total_camas = contar_total_camas($conexionPDO);
+    $camas_ocupadas = $total_camas - $camas_libres;
+    
+    // Display day with status...
+}
+```
+</CodeGroup>
+
+### Visual Day Status
+
+Days are color-coded based on their reservation status (`viewAdmin.php:755-764`):
+
+<CodeGroup>
+```php viewAdmin.php - Day CSS Classes
+// Determine CSS class
+$clase = 'dia-calendario';
+if ($es_pasado) {
+    $clase .= ' pasado';
+} elseif ($pendientes > 0 && $aprobadas > 0) {
+    $clase .= ' mixto';  // Has both pending and approved
+} elseif ($pendientes > 0) {
+    $clase .= ' con-pendientes';  // Only pending
+} elseif ($aprobadas > 0) {
+    $clase .= ' con-aprobadas';  // Only approved
+}
+```
+</CodeGroup>
+
+### Calendar CSS Styles
+
+From `viewAdmin.php:471-577`:
+
+<CodeGroup>
+```css viewAdmin.php - Calendar Styling
+.calendario {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+}
+
+.dia-calendario {
+    aspect-ratio: 1;
+    border: 2px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    background: white;
+    min-height: 80px;
+}
+
+.dia-calendario:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+}
+
+.dia-calendario.con-pendientes {
+    border-color: #fbbf24;  /* Yellow border */
+    background: #fffbeb;     /* Light yellow background */
+}
+
+.dia-calendario.con-aprobadas {
+    border-color: #10b981;  /* Green border */
+    background: #ecfdf5;     /* Light green background */
+}
+
+.dia-calendario.mixto {
+    border-color: #3b82f6;  /* Blue border */
+    background: linear-gradient(135deg, #fffbeb 50%, #ecfdf5 50%);
+}
+
+.dia-calendario.pasado {
+    background: #f3f4f6;
+    color: #9ca3af;
+    cursor: default;
+}
+```
+</CodeGroup>
+
+### Calendar Legend
+
+The admin calendar includes a visual legend (`viewAdmin.php:681-698`):
+
+<CodeGroup>
+```html viewAdmin.php - Calendar Legend
+<div class="leyenda-calendario">
+    <div class="leyenda-item">
+        <div class="leyenda-color" style="background: #fffbeb; border-color: #fbbf24;"></div>
+        <span>Con reservas pendientes</span>
+    </div>
+    <div class="leyenda-item">
+        <div class="leyenda-color" style="background: #ecfdf5; border-color: #10b981;"></div>
+        <span>Con reservas aprobadas</span>
+    </div>
+    <div class="leyenda-item">
+        <div class="leyenda-color" style="background: linear-gradient(135deg, #fffbeb 50%, #ecfdf5 50%); border-color: #3b82f6;"></div>
+        <span>Mixto (pendientes y aprobadas)</span>
+    </div>
+    <div class="leyenda-item">
+        <div class="leyenda-color" style="background: white; border-color: #e5e7eb;"></div>
+        <span>Sin reservas</span>
+    </div>
+</div>
+```
+</CodeGroup>
+
+## User Calendar Implementation
+
+### Personal Reservation Tracking
+
+The user calendar in `viewSocio.php:426-565` highlights the user's own reservations:
+
+<CodeGroup>
+```php viewSocio.php - Check User Reservations
+for ($dia = 1; $dia <= $dias_en_mes; $dia++) {
+    $fecha = sprintf('%04d-%02d-%02d', $anio_actual, $mes_actual, $dia);
+    $hoy = date('Y-m-d');
+    $es_pasado = $fecha < $hoy;
+
+    // Check if user has reservation on this date
+    $stmt_mis_reservas = $conexionPDO->prepare("
+        SELECT r.id, r.estado, h.numero as habitacion,
+               GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas
+        FROM reservas r
+        JOIN habitaciones h ON r.id_habitacion = h.id
+        LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
+        LEFT JOIN camas c ON rc.id_cama = c.id
+        WHERE r.id_usuario = :id_usuario
+        AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+        AND r.estado IN ('pendiente', 'reservada')
+        GROUP BY r.id, r.estado, h.numero
+    ");
+    $stmt_mis_reservas->bindParam(':id_usuario', $_SESSION['userId'], PDO::PARAM_INT);
+    $stmt_mis_reservas->bindParam(':fecha', $fecha);
+    $stmt_mis_reservas->execute();
+    $mi_reserva = $stmt_mis_reservas->fetch(PDO::FETCH_ASSOC);
+
+    // Get total beds available
+    $camas_libres = contar_camas_libres_por_fecha($conexionPDO, $fecha);
+    $total_camas = 26;
+
+    // Determine CSS class
+    $clase = 'dia-calendario';
+    $info_extra = '';
+
+    if ($es_pasado) {
+        $clase .= ' pasado';
+    } elseif ($mi_reserva) {
+        // User has reservation on this date
+        if ($mi_reserva['estado'] === 'reservada') {
+            $clase .= ' mi-reserva-aprobada';
+            $info_extra = "Hab. {$mi_reserva['habitacion']}, Camas {$mi_reserva['camas']}";
+        } else {
+            $clase .= ' mi-reserva-pendiente';
+            $info_extra = "Pendiente - Hab. {$mi_reserva['habitacion']}, Camas {$mi_reserva['camas']}";
+        }
+    } elseif ($camas_libres === 0) {
+        $clase .= ' lleno';
+    } elseif ($camas_libres < 5) {
+        $clase .= ' pocas-camas';
+    }
+}
+```
+</CodeGroup>
+
+### User Calendar Styles
+
+From `viewSocio.php:225-333`:
+
+<CodeGroup>
+```css viewSocio.php - User Calendar Styling
+.dia-calendario.mi-reserva-aprobada {
+    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+    color: white;
+    border: 3px solid #0d6efd;
+    font-weight: bold;
+    box-shadow: 0 4px 12px rgba(13, 110, 253, 0.4);
+}
+
+.dia-calendario.mi-reserva-pendiente {
+    background: linear-gradient(135deg, #0dcaf0 0%, #0aa2c0 100%);
+    color: white;
+    border: 3px dashed #0dcaf0;
+    font-weight: bold;
+    box-shadow: 0 4px 12px rgba(13, 202, 240, 0.4);
+}
+
+.dia-calendario.lleno {
+    background: #dc3545;
+    color: white;
+    cursor: not-allowed;
+}
+
+.dia-calendario.pocas-camas {
+    background: #ffc107;
+}
+```
+</CodeGroup>
+
+### Click to Reserve
+
+User calendar days are clickable to initiate reservations:
+
+<CodeGroup>
+```html viewSocio.php - Clickable Calendar Days
+<div class="<?php echo $clase ?>" 
+     data-fecha="<?php echo $fecha ?>"
+     <?php if ($mi_reserva): ?>
+         title="<?php echo $info_extra ?>"
+     <?php elseif (!$es_pasado && $camas_libres > 0): ?>
+         onclick="irAReserva('<?php echo $fecha ?>')" 
+         style="cursor: pointer;"
+         title="Click para reservar este día"
+     <?php endif; ?>>
+    <!-- Day content -->
+</div>
+
+<script>
+function irAReserva(fecha) {
+    // Navigate to reservation form with pre-filled date
+    window.location.href = '?accion=nueva_reserva&fecha_inicio=' + fecha;
+}
+</script>
+```
+</CodeGroup>
+
+## Date Picker Integration
+
+The reservation form uses Flatpickr for date selection with availability highlighting:
+
+### Flatpickr Configuration
+
+From `viewSocio.php` (line 800+):
+
+<CodeGroup>
+```javascript Flatpickr Setup
+// Initialize Flatpickr for start date
+const pickerInicio = flatpickr("#fecha_inicio", {
+    dateFormat: "Y-m-d",
+    minDate: "today",
+    locale: "es",
+    onChange: function(selectedDates, dateStr, instance) {
+        // Update end date picker minimum
+        if (pickerFin) {
+            pickerFin.set('minDate', dateStr);
+        }
+        // Load available rooms when both dates selected
+        cargarHabitacionesDisponibles();
+    },
+    onDayCreate: function(dObj, dStr, fp, dayElem) {
+        const fecha = dayElem.dateObj.toISOString().split('T')[0];
+        
+        // Fetch availability for this date
+        fetch(`contar_camas_disponibles.php?fecha=${fecha}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.libres === 0) {
+                    dayElem.classList.add('dia-completo');
+                }
+            });
+    }
+});
+
+// Initialize Flatpickr for end date
+const pickerFin = flatpickr("#fecha_fin", {
+    dateFormat: "Y-m-d",
+    minDate: "today",
+    locale: "es",
+    onChange: function(selectedDates, dateStr, instance) {
+        cargarHabitacionesDisponibles();
+    }
+});
+```
+</CodeGroup>
+
+### Highlighting Full Days
+
+Custom CSS styles full days in red:
+
+<CodeGroup>
+```css Flatpickr Custom Styling
+.flatpickr-day.dia-completo {
+    background-color: #dc3545 !important;
+    color: white !important;
+    border-color: #dc3545 !important;
+    cursor: pointer !important;
+    position: relative;
+}
+
+.flatpickr-day.dia-completo:hover {
+    background-color: #c82333 !important;
+    border-color: #bd2130 !important;
+    transform: scale(1.05);
+}
+
+/* Warning icon on full days */
+.flatpickr-day.dia-completo::after {
+    content: '⚠';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 10px;
+}
+```
+</CodeGroup>
+
+<Warning>
+Days marked as full are visually highlighted but NOT disabled, allowing users to still select them. Server-side validation prevents actual booking.
+</Warning>
+
+## Dynamic Room Loading
+
+When dates are selected, available rooms load via AJAX:
+
+<CodeGroup>
+```javascript Load Available Rooms
+function cargarHabitacionesDisponibles() {
+    const fechaInicio = document.getElementById('fecha_inicio').value;
+    const fechaFin = document.getElementById('fecha_fin').value;
+
+    if (!fechaInicio || !fechaFin) {
+        return;
+    }
+
+    fetch(`disponibilidad.php?fecha_inicio=${fechaInicio}&fecha_fin=${fechaFin}`)
+        .then(response => response.json())
+        .then(habitaciones => {
+            const select = document.getElementById('selectHabitacion');
+            select.innerHTML = '<option value="">Seleccione habitación</option>';
+
+            if (habitaciones.length === 0) {
+                select.innerHTML = '<option value="">No hay habitaciones disponibles</option>';
+                return;
+            }
+
+            habitaciones.forEach(hab => {
+                const option = document.createElement('option');
+                option.value = hab.id;
+                option.dataset.camasDisponibles = hab.camas_disponibles;
+                option.textContent = `Habitación ${hab.numero} - ${hab.camas_disponibles} camas disponibles`;
+                select.appendChild(option);
+            });
+
+            select.disabled = false;
+        })
+        .catch(error => {
+            console.error('Error loading rooms:', error);
+        });
+}
+```
+</CodeGroup>
+
+## Reservation Count Badge
+
+The admin dashboard shows pending reservation count in real-time:
+
+<CodeGroup>
+```php viewAdmin.php - Stats Card
+<div class="col-md-4">
+    <div class="card card-stat warning shadow-sm">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="text-muted">Reservas Pendientes</h6>
+                    <h2><?php echo count($reservas_pendientes) ?></h2>
+                </div>
+                <i class="bi bi-hourglass-split fs-1 text-warning"></i>
+            </div>
+        </div>
+    </div>
+</div>
+```
+</CodeGroup>
+
+## Full Refuge Indicator
+
+When the entire refuge is reserved, the calendar clearly indicates this:
+
+<CodeGroup>
+```php Check for Full Refuge Reservation
+$stmt_check = $conexionPDO->prepare("
+    SELECT COUNT(*) as total
+    FROM reservas
+    WHERE id_habitacion IS NULL
+    AND estado IN ('pendiente', 'reservada')
+    AND (fecha_inicio <= :fecha_fin AND fecha_fin >= :fecha_inicio)
+");
+$stmt_check->bindParam(':fecha_inicio', $fecha_inicio);
+$stmt_check->bindParam(':fecha_fin', $fecha_fin);
+$stmt_check->execute();
+$resultado_check = $stmt_check->fetch(PDO::FETCH_ASSOC);
+
+// If whole refuge is reserved, no rooms available
+if ($resultado_check['total'] > 0) {
+    return [];
+}
+```
+</CodeGroup>
+
+<Info>
+A reservation with `id_habitacion = NULL` indicates the entire refuge is booked for an event.
+</Info>
+
+## Capacity Visualization
+
+The admin calendar displays bed availability with color-coded indicators:
+
+<CodeGroup>
+```php viewAdmin.php - Capacity Display
+<?php if (!$es_pasado): ?>
+    <div class='info-reservas'>
+        <?php
+        // Show bed availability
+        if ($camas_libres === 0) {
+            echo "<div class='camas-info text-danger mb-1'><strong>Completo</strong></div>";
+        } else {
+            $color_camas = $camas_libres < 5 ? 'text-warning' : 'text-success';
+            echo "<div class='camas-info {$color_camas} mb-1'>";
+            echo "<i class='bi bi-door-open'></i> <strong>{$camas_libres}/{$total_camas}</strong> libres";
+            echo "</div>";
+        }
+
+        // Show pending reservations
+        if ($pendientes > 0) {
+            echo "<span class='badge bg-warning text-dark'>";
+            echo "$pendientes pendiente" . ($pendientes > 1 ? 's' : '');
+            echo "</span> ";
+        }
+
+        // Show approved reservations
+        if ($aprobadas > 0) {
+            echo "<span class='badge bg-success'>";
+            echo "$aprobadas aprobada" . ($aprobadas > 1 ? 's' : '');
+            echo "</span>";
+        }
+        ?>
+    </div>
+<?php endif; ?>
+```
+</CodeGroup>
+
+## Usage Examples
+
+### Display calendar for specific month
+
+```php
+$mes = 3;   // March
+$anio = 2024;
+
+$url = "?accion=dashboard&mes=$mes&anio=$anio";
+```
+
+### Navigate to previous month
+
+```php
+$mes_anterior = $mes_actual - 1;
+$anio_anterior = $anio_actual;
+
+if ($mes_anterior < 1) {
+    $mes_anterior = 12;
+    $anio_anterior--;
+}
+
+$url = "?accion=dashboard&mes=$mes_anterior&anio=$anio_anterior";
+```
+
+### Check if specific date has availability
+
+```php
+$fecha = '2024-03-15';
+$camas_libres = contar_camas_libres_por_fecha($conexionPDO, $fecha);
+
+if ($camas_libres > 0) {
+    echo "Available: $camas_libres beds";
+} else {
+    echo "Fully booked";
+}
+```
+
+### Get reservation summary for a date
+
+```php
+$fecha = '2024-03-15';
+
+$stmt = $conexionPDO->prepare("
+    SELECT estado, COUNT(*) as total
+    FROM reservas
+    WHERE :fecha BETWEEN fecha_inicio AND fecha_fin
+    GROUP BY estado
+");
+$stmt->bindParam(':fecha', $fecha);
+$stmt->execute();
+$reservas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+foreach ($reservas as $r) {
+    echo "{$r['estado']}: {$r['total']} reservations\n";
+}
+```
+
+## Performance Considerations
+
+<AccordionGroup>
+<Accordion title="Database Queries">
+The calendar queries the database once per day in the visible month. For a 31-day month, this results in ~31 queries. Consider caching for high-traffic scenarios.
+</Accordion>
+
+<Accordion title="Date Range Optimization">
+Bed availability queries use efficient date range checks:
+```sql
+r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio
+```
+This finds any reservation that overlaps with the queried period.
+</Accordion>
+
+<Accordion title="Group Aggregation">
+Calendar queries use `GROUP BY` and `COUNT()` for efficient aggregation rather than fetching all reservation records.
+</Accordion>
+</AccordionGroup>

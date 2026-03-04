@@ -1,0 +1,676 @@
+---
+title: 'User Management'
+description: 'Complete CRUD operations for user accounts with pagination, search, and export'
+icon: 'users'
+---
+
+## Overview
+
+The user management system provides comprehensive tools for creating, reading, updating, and deleting user accounts with role-based permissions, advanced filtering, and CSV export capabilities.
+
+## User Data Structure
+
+Users are stored with the following fields:
+
+```sql
+CREATE TABLE usuarios (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    num_socio VARCHAR(50),
+    dni VARCHAR(20),
+    telf VARCHAR(20),
+    email VARCHAR(100) UNIQUE,
+    nombre VARCHAR(100),
+    apellido1 VARCHAR(100),
+    apellido2 VARCHAR(100),
+    password VARCHAR(255),
+    rol ENUM('admin', 'user'),
+    foto_perfil VARCHAR(255)
+);
+```
+
+## Creating Users
+
+The `crear_usuario()` function in `functions.php:72-97` handles user creation with automatic password hashing:
+
+<CodeGroup>
+```php functions.php - crear_usuario()
+function crear_usuario($conexion, $datos)
+{
+    try {
+        // Hash password with bcrypt
+        $password_hash = password_hash($datos['password'], PASSWORD_BCRYPT);
+
+        $stmt = $conexion->prepare("
+            INSERT INTO usuarios (num_socio, dni, telf, email, nombre, 
+                                 apellido1, apellido2, password, rol)
+            VALUES (:num_socio, :dni, :telf, :email, :nombre, 
+                   :apellido1, :apellido2, :password, :rol)
+        ");
+
+        $stmt->bindParam(':num_socio', $datos['num_socio']);
+        $stmt->bindParam(':dni', $datos['dni']);
+        $stmt->bindParam(':telf', $datos['telf']);
+        $stmt->bindParam(':email', $datos['email']);
+        $stmt->bindParam(':nombre', $datos['nombre']);
+        $stmt->bindParam(':apellido1', $datos['apellido1']);
+        $stmt->bindParam(':apellido2', $datos['apellido2']);
+        $stmt->bindParam(':password', $password_hash);
+        $stmt->bindParam(':rol', $datos['rol']);
+
+        return $stmt->execute();
+    } catch (PDOException $e) {
+        error_log("Error al crear usuario: " . $e->getMessage());
+        return false;
+    }
+}
+```
+</CodeGroup>
+
+### Admin Interface Usage
+
+From `viewAdmin.php:26-46`:
+
+<CodeGroup>
+```php viewAdmin.php
+case 'crear_usuario':
+    $datos = [
+        'num_socio' => sanitize_input($_POST['num_socio']),
+        'dni'       => sanitize_input($_POST['dni']),
+        'telf'      => sanitize_input($_POST['telf']),
+        'email'     => sanitize_input($_POST['email']),
+        'nombre'    => sanitize_input($_POST['nombre']),
+        'apellido1' => sanitize_input($_POST['apellido1']),
+        'apellido2' => sanitize_input($_POST['apellido2']),
+        'password'  => $_POST['password'],
+        'rol'       => sanitize_input($_POST['rol']),
+    ];
+
+    if (crear_usuario($conexionPDO, $datos)) {
+        $mensaje = "Usuario creado exitosamente";
+    } else {
+        $mensaje = "Error al crear el usuario";
+        $tipo_mensaje = 'danger';
+    }
+    $accion = 'usuarios';
+    break;
+```
+</CodeGroup>
+
+<Note>
+All user input is sanitized using the `sanitize_input()` function before processing. The password is NOT sanitized to preserve special characters.
+</Note>
+
+## Reading Users
+
+### Simple List
+
+Get all users with `listar_usuarios()` in `functions.php:36-45`:
+
+<CodeGroup>
+```php functions.php - listar_usuarios()
+function listar_usuarios($conexion)
+{
+    try {
+        $stmt = $conexion->query(
+            "SELECT id, num_socio, dni, telf, email, nombre, apellido1, 
+                    apellido2, rol 
+             FROM usuarios 
+             ORDER BY id"
+        );
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Error al listar usuarios: " . $e->getMessage());
+        return [];
+    }
+}
+```
+</CodeGroup>
+
+### Get Single User
+
+Retrieve a specific user with `obtener_usuario()` in `functions.php:53-64`:
+
+<CodeGroup>
+```php functions.php - obtener_usuario()
+function obtener_usuario($conexion, $id)
+{
+    try {
+        $stmt = $conexion->prepare(
+            "SELECT * FROM usuarios WHERE id = :id"
+        );
+        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Error al obtener usuario: " . $e->getMessage());
+        return false;
+    }
+}
+```
+</CodeGroup>
+
+### Paginated Listing with Filters
+
+The `listar_usuarios_paginado()` function in `functions.php:169-231` provides advanced listing capabilities:
+
+<CodeGroup>
+```php functions.php - listar_usuarios_paginado()
+function listar_usuarios_paginado($conexion, $filtros = [])
+{
+    try {
+        $page      = $filtros['page'] ?? 1;
+        $limit     = $filtros['limit'] ?? 10;
+        $offset    = ($page - 1) * $limit;
+        $search    = $filtros['search'] ?? '';
+        $order_by  = $filtros['order_by'] ?? 'num_socio';
+        $order_dir = $filtros['order_dir'] ?? 'ASC';
+
+        // Validate sort column
+        $valid_columns = ['num_socio', 'nombre', 'email', 'dni', 'rol'];
+        if (!in_array($order_by, $valid_columns)) {
+            $order_by = 'num_socio';
+        }
+
+        // Validate sort direction
+        $order_dir = strtoupper($order_dir) === 'DESC' ? 'DESC' : 'ASC';
+
+        // Build base query
+        $sql = "SELECT id, num_socio, dni, telf, email, nombre, apellido1, 
+                       apellido2, rol
+                FROM usuarios
+                WHERE 1=1";
+
+        $params = [];
+
+        // Add search filter
+        if (!empty($search)) {
+            $sql .= " AND (
+                nombre LIKE :search
+                OR apellido1 LIKE :search
+                OR apellido2 LIKE :search
+                OR email LIKE :search
+                OR dni LIKE :search
+                OR num_socio LIKE :search
+            )";
+            $params[':search'] = '%' . $search . '%';
+        }
+
+        // Add sorting
+        $sql .= " ORDER BY $order_by $order_dir";
+
+        // Add pagination
+        $sql .= " LIMIT :limit OFFSET :offset";
+
+        $stmt = $conexion->prepare($sql);
+
+        // Bind search parameters
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+
+        // Bind pagination parameters
+        $stmt->bindValue(':limit', (int) $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', (int) $offset, PDO::PARAM_INT);
+
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Error al listar usuarios paginados: " . $e->getMessage());
+        return [];
+    }
+}
+```
+</CodeGroup>
+
+<Info>
+The search functionality searches across multiple fields simultaneously: name, surnames, email, DNI, and member number.
+</Info>
+
+### Count Users
+
+For pagination, use `contar_usuarios()` in `functions.php:239-273`:
+
+<CodeGroup>
+```php functions.php - contar_usuarios()
+function contar_usuarios($conexion, $filtros = [])
+{
+    try {
+        $search = $filtros['search'] ?? '';
+
+        $sql = "SELECT COUNT(*) as total FROM usuarios WHERE 1=1";
+        $params = [];
+
+        // Add search filter
+        if (!empty($search)) {
+            $sql .= " AND (
+                nombre LIKE :search
+                OR apellido1 LIKE :search
+                OR apellido2 LIKE :search
+                OR email LIKE :search
+                OR dni LIKE :search
+                OR num_socio LIKE :search
+            )";
+            $params[':search'] = '%' . $search . '%';
+        }
+
+        $stmt = $conexion->prepare($sql);
+
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+
+        $stmt->execute();
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return (int) $result['total'];
+    } catch (PDOException $e) {
+        error_log("Error al contar usuarios: " . $e->getMessage());
+        return 0;
+    }
+}
+```
+</CodeGroup>
+
+## Updating Users
+
+The `actualizar_usuario()` function in `functions.php:106-143` handles updates with optional password change:
+
+<CodeGroup>
+```php functions.php - actualizar_usuario()
+function actualizar_usuario($conexion, $id, $datos)
+{
+    try {
+        // Check if password is being updated
+        if (!empty($datos['password'])) {
+            $password_hash = password_hash($datos['password'], PASSWORD_BCRYPT);
+            $stmt = $conexion->prepare("
+                UPDATE usuarios
+                SET num_socio = :num_socio, dni = :dni, telf = :telf, email = :email,
+                    nombre = :nombre, apellido1 = :apellido1, apellido2 = :apellido2,
+                    password = :password, rol = :rol
+                WHERE id = :id
+            ");
+            $stmt->bindParam(':password', $password_hash);
+        } else {
+            // Update without changing password
+            $stmt = $conexion->prepare("
+                UPDATE usuarios
+                SET num_socio = :num_socio, dni = :dni, telf = :telf, email = :email,
+                    nombre = :nombre, apellido1 = :apellido1, apellido2 = :apellido2, 
+                    rol = :rol
+                WHERE id = :id
+            ");
+        }
+
+        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+        $stmt->bindParam(':num_socio', $datos['num_socio']);
+        $stmt->bindParam(':dni', $datos['dni']);
+        $stmt->bindParam(':telf', $datos['telf']);
+        $stmt->bindParam(':email', $datos['email']);
+        $stmt->bindParam(':nombre', $datos['nombre']);
+        $stmt->bindParam(':apellido1', $datos['apellido1']);
+        $stmt->bindParam(':apellido2', $datos['apellido2']);
+        $stmt->bindParam(':rol', $datos['rol']);
+
+        return $stmt->execute();
+    } catch (PDOException $e) {
+        error_log("Error al actualizar usuario: " . $e->getMessage());
+        return false;
+    }
+}
+```
+</CodeGroup>
+
+### Protected User Prevention
+
+The admin interface protects the primary admin account from modification (`viewAdmin.php:48-58`):
+
+<CodeGroup>
+```php viewAdmin.php
+case 'actualizar_usuario':
+    $id = (int) $_POST['id'];
+
+    // Protect primary admin user
+    $usuario_actual = obtener_usuario($conexionPDO, $id);
+    if ($usuario_actual && $usuario_actual['email'] === 'admin@hostel.com') {
+        $mensaje = "No se puede modificar el usuario administrador principal";
+        $tipo_mensaje = 'danger';
+        $accion = 'usuarios';
+        break;
+    }
+
+    // Prepare data and update...
+```
+</CodeGroup>
+
+<Warning>
+The system administrator account (admin@hostel.com) cannot be modified or deleted through the UI to prevent lockout.
+</Warning>
+
+## Deleting Users
+
+The `eliminar_usuario()` function in `functions.php:151-161` removes users:
+
+<CodeGroup>
+```php functions.php - eliminar_usuario()
+function eliminar_usuario($conexion, $id)
+{
+    try {
+        $stmt = $conexion->prepare(
+            "DELETE FROM usuarios WHERE id = :id"
+        );
+        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+        return $stmt->execute();
+    } catch (PDOException $e) {
+        error_log("Error al eliminar usuario: " . $e->getMessage());
+        return false;
+    }
+}
+```
+</CodeGroup>
+
+### Admin Protection on Delete
+
+From `viewAdmin.php:81-100`:
+
+<CodeGroup>
+```php viewAdmin.php
+case 'eliminar_usuario':
+    $id = (int) $_POST['id'];
+
+    // Protect primary admin user
+    $usuario_actual = obtener_usuario($conexionPDO, $id);
+    if ($usuario_actual && $usuario_actual['email'] === 'admin@hostel.com') {
+        $mensaje = "No se puede eliminar el usuario administrador principal";
+        $tipo_mensaje = 'danger';
+        $accion = 'usuarios';
+        break;
+    }
+
+    if (eliminar_usuario($conexionPDO, $id)) {
+        $mensaje = "Usuario eliminado exitosamente";
+    } else {
+        $mensaje = "Error al eliminar el usuario";
+        $tipo_mensaje = 'danger';
+    }
+    $accion = 'usuarios';
+    break;
+```
+</CodeGroup>
+
+## CSV Export
+
+The `export_usuarios_csv()` function in `functions.php:281-358` exports user data to CSV format:
+
+<CodeGroup>
+```php functions.php - export_usuarios_csv()
+function export_usuarios_csv($conexion, $filtros = [])
+{
+    try {
+        $search    = $filtros['search'] ?? '';
+        $order_by  = $filtros['order_by'] ?? 'num_socio';
+        $order_dir = $filtros['order_dir'] ?? 'ASC';
+
+        // Validate sort columns
+        $valid_columns = ['num_socio', 'nombre', 'email', 'dni', 'rol'];
+        if (!in_array($order_by, $valid_columns)) {
+            $order_by = 'num_socio';
+        }
+
+        $order_dir = strtoupper($order_dir) === 'DESC' ? 'DESC' : 'ASC';
+
+        $sql = "SELECT num_socio, nombre, apellido1, apellido2, dni, email, telf, rol
+                FROM usuarios
+                WHERE 1=1";
+
+        $params = [];
+
+        // Apply search filter
+        if (!empty($search)) {
+            $sql .= " AND (
+                nombre LIKE :search
+                OR apellido1 LIKE :search
+                OR apellido2 LIKE :search
+                OR email LIKE :search
+                OR dni LIKE :search
+                OR num_socio LIKE :search
+            )";
+            $params[':search'] = '%' . $search . '%';
+        }
+
+        $sql .= " ORDER BY $order_by $order_dir";
+
+        $stmt = $conexion->prepare($sql);
+
+        foreach ($params as $key => $value) {
+            $stmt->bindValue($key, $value);
+        }
+
+        $stmt->execute();
+        $usuarios = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Configure CSV download headers
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="usuarios_' . 
+               date('Y-m-d_H-i-s') . '.csv"');
+
+        // Create output stream
+        $output = fopen('php://output', 'w');
+
+        // UTF-8 BOM for proper character encoding in Excel
+        fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+        // Write headers
+        fputcsv($output, ['Nº Socio', 'Nombre', 'Apellido 1', 'Apellido 2', 
+                          'DNI', 'Email', 'Teléfono', 'Rol'], ';');
+
+        // Write data rows
+        foreach ($usuarios as $usuario) {
+            fputcsv($output, [
+                $usuario['num_socio'],
+                $usuario['nombre'],
+                $usuario['apellido1'],
+                $usuario['apellido2'],
+                $usuario['dni'],
+                $usuario['email'],
+                $usuario['telf'],
+                strtoupper($usuario['rol']),
+            ], ';');
+        }
+
+        fclose($output);
+        exit;
+    } catch (PDOException $e) {
+        error_log("Error al exportar usuarios CSV: " . $e->getMessage());
+        die("Error al exportar CSV");
+    }
+}
+```
+</CodeGroup>
+
+<Tip>
+The CSV export includes a UTF-8 BOM (Byte Order Mark) to ensure proper character encoding when opening in Microsoft Excel.
+</Tip>
+
+### Export Usage
+
+From `viewAdmin.php:289-299`:
+
+<CodeGroup>
+```php viewAdmin.php
+case 'export_usuarios_csv':
+    $search = $_GET['search'] ?? '';
+    $sort   = $_GET['sort'] ?? 'num_socio';
+    $dir    = $_GET['dir'] ?? 'ASC';
+
+    export_usuarios_csv($conexionPDO, [
+        'search'    => $search,
+        'order_by'  => $sort,
+        'order_dir' => $dir,
+    ]);
+    break;
+```
+</CodeGroup>
+
+## Admin Interface Features
+
+### Pagination Example
+
+From `viewAdmin.php:310-329`:
+
+<CodeGroup>
+```php viewAdmin.php
+if ($accion === 'usuarios' || $accion === 'editar_usuario') {
+    // Pagination and filter parameters
+    $page_usuarios      = isset($_GET['page']) ? (int) $_GET['page'] : 1;
+    $limit_usuarios     = 10;
+    $offset_usuarios    = ($page_usuarios - 1) * $limit_usuarios;
+    $search_usuarios    = $_GET['search'] ?? '';
+    $sort_usuarios      = $_GET['sort'] ?? 'num_socio';
+    $order_dir_usuarios = $_GET['dir'] ?? 'ASC';
+
+    $filtros_usuarios = [
+        'page'      => $page_usuarios,
+        'limit'     => $limit_usuarios,
+        'search'    => $search_usuarios,
+        'order_by'  => $sort_usuarios,
+        'order_dir' => $order_dir_usuarios,
+    ];
+
+    $usuarios = listar_usuarios_paginado($conexionPDO, $filtros_usuarios);
+    $total_usuarios = contar_usuarios($conexionPDO, ['search' => $search_usuarios]);
+    $paginas_usuarios = ceil($total_usuarios / $limit_usuarios);
+}
+```
+</CodeGroup>
+
+### Search Functionality
+
+Search is implemented as a GET form:
+
+```html
+<form method="get" class="input-group">
+    <input type="hidden" name="accion" value="usuarios">
+    <input type="text" class="form-control" name="search"
+           placeholder="Buscar por nombre, email, DNI..."
+           value="<?php echo htmlspecialchars($search_usuarios) ?>">
+    <button class="btn btn-outline-secondary" type="submit">
+        <i class="bi bi-search"></i>
+    </button>
+</form>
+```
+
+### Sorting Controls
+
+Sorting is handled via dropdown:
+
+```html
+<select class="form-select" 
+        onchange="window.location.href='?accion=usuarios&search=<?php echo urlencode($search_usuarios) ?>&sort=' + this.value + '&dir=<?php echo $order_dir_usuarios ?>'">
+    <option value="num_socio" <?php echo $sort_usuarios === 'num_socio' ? 'selected' : '' ?>>Ordenar por Nº Socio</option>
+    <option value="nombre" <?php echo $sort_usuarios === 'nombre' ? 'selected' : '' ?>>Ordenar por Nombre</option>
+    <option value="email" <?php echo $sort_usuarios === 'email' ? 'selected' : '' ?>>Ordenar por Email</option>
+    <option value="dni" <?php echo $sort_usuarios === 'dni' ? 'selected' : '' ?>>Ordenar por DNI</option>
+    <option value="rol" <?php echo $sort_usuarios === 'rol' ? 'selected' : '' ?>>Ordenar por Rol</option>
+</select>
+```
+
+## Input Sanitization
+
+All user input is sanitized before database operations using `sanitize_input()` from `functions.php:1452-1458`:
+
+<CodeGroup>
+```php functions.php
+function sanitize_input($data)
+{
+    $data = trim($data);                                    // Remove whitespace
+    $data = stripslashes($data);                            // Remove backslashes
+    $data = htmlspecialchars($data, ENT_QUOTES, 'UTF-8');  // Convert special chars
+    return $data;
+}
+```
+</CodeGroup>
+
+<Warning>
+Passwords should NOT be sanitized with `htmlspecialchars()` as this may alter the password. Passwords should only be hashed.
+</Warning>
+
+## Error Handling
+
+All database functions include try-catch blocks with error logging:
+
+```php
+try {
+    // Database operations
+} catch (PDOException $e) {
+    error_log("Error al [operación]: " . $e->getMessage());
+    return false;
+}
+```
+
+<Info>
+Errors are logged to the PHP error log and never displayed to users, preventing information disclosure.
+</Info>
+
+## Usage Examples
+
+### Create a new user
+
+```php
+$datos = [
+    'num_socio' => '12345',
+    'dni' => '12345678A',
+    'telf' => '600123456',
+    'email' => 'nuevo@example.com',
+    'nombre' => 'Juan',
+    'apellido1' => 'Pérez',
+    'apellido2' => 'García',
+    'password' => 'SecureP@ss123',
+    'rol' => 'user'
+];
+
+$resultado = crear_usuario($conexionPDO, $datos);
+```
+
+### Get paginated users with search
+
+```php
+$filtros = [
+    'page' => 1,
+    'limit' => 10,
+    'search' => 'Juan',
+    'order_by' => 'nombre',
+    'order_dir' => 'ASC'
+];
+
+$usuarios = listar_usuarios_paginado($conexionPDO, $filtros);
+$total = contar_usuarios($conexionPDO, ['search' => 'Juan']);
+```
+
+### Update user without changing password
+
+```php
+$datos = [
+    'num_socio' => '12345',
+    'dni' => '12345678A',
+    'telf' => '600999999',  // Changed phone
+    'email' => 'nuevo@example.com',
+    'nombre' => 'Juan',
+    'apellido1' => 'Pérez',
+    'apellido2' => 'García',
+    'password' => '',  // Empty = don't change
+    'rol' => 'user'
+];
+
+actualizar_usuario($conexionPDO, $user_id, $datos);
+```
+
+### Export users to CSV
+
+```php
+export_usuarios_csv($conexionPDO, [
+    'search' => 'admin',
+    'order_by' => 'email',
+    'order_dir' => 'DESC'
+]);
+// This function sends headers and exits, triggering download
+```

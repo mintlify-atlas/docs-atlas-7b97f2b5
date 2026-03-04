@@ -1,80 +1,428 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start Guide
+description: Get Refugio up and running in minutes with this step-by-step guide
 ---
 
-## Get started in three steps
+# Quick Start Guide
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+This guide will help you get Refugio running on your local machine in just a few minutes. Perfect for development, testing, or evaluation purposes.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  This quick start uses PostgreSQL. For MySQL setup or production deployment, see the [Installation Guide](/installation).
 </Note>
+
+## Prerequisites
+
+Before you begin, ensure you have:
+
+- PHP 7.4 or higher
+- PostgreSQL 12+ (or MySQL 5.7+)
+- Git (for cloning the repository)
+- A terminal/command prompt
+
+## Installation Steps
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the Refugio repository to your local machine:
+
+    ```bash
+    git clone https://github.com/yourusername/refugio.git
+    cd refugio
+    ```
+
+    <Info>
+      Replace the repository URL with your actual Refugio repository location.
+    </Info>
+  </Step>
+
+  <Step title="Set Up the Database">
+    Create a new PostgreSQL database:
+
+    <CodeGroup>
+      ```bash Windows (PowerShell)
+      psql -U postgres
+      CREATE DATABASE refugio;
+      \q
+      ```
+
+      ```bash macOS/Linux
+      sudo -u postgres psql
+      CREATE DATABASE refugio;
+      \q
+      ```
+    </CodeGroup>
+
+    Import the database schema:
+
+    <CodeGroup>
+      ```bash Windows (PowerShell)
+      psql -U postgres -d refugio -f sql\refugio.sql
+      ```
+
+      ```bash macOS/Linux
+      psql -U postgres -d refugio -f sql/refugio.sql
+      ```
+    </CodeGroup>
+
+    <Check>
+      The SQL file includes sample data with test users and room configurations.
+    </Check>
+  </Step>
+
+  <Step title="Configure Database Connection">
+    Create a `conexion.php` file in the project root (this file is gitignored for security):
+
+    ```php conexion.php
+    <?php
+    session_start();
+
+    // PostgreSQL Configuration
+    $host = 'localhost';
+    $port = '5432';
+    $dbname = 'refugio';
+    $user = 'postgres';
+    $password = 'your_postgres_password';
+
+    try {
+        $dsn = "pgsql:host=$host;port=$port;dbname=$dbname";
+        $conexionPDO = new PDO($dsn, $user, $password, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+        ]);
+    } catch (PDOException $e) {
+        die("Error de conexión: " . $e->getMessage());
+    }
+    ?>
+    ```
+
+    <Warning>
+      Replace `your_postgres_password` with your actual PostgreSQL password.
+    </Warning>
+  </Step>
+
+  <Step title="Start the Development Server">
+    Start PHP's built-in web server:
+
+    ```bash
+    php -S localhost:8000
+    ```
+
+    You should see output similar to:
+
+    ```
+    PHP 7.4.33 Development Server (http://localhost:8000) started
+    ```
+  </Step>
+
+  <Step title="Access the Application">
+    Open your web browser and navigate to:
+
+    ```
+    http://localhost:8000
+    ```
+
+    You'll be redirected to the login page automatically.
+  </Step>
+</Steps>
+
+## First Login
+
+Use one of the default test accounts to log in:
+
+<Tabs>
+  <Tab title="Admin Account">
+    Login with administrator privileges:
+
+    - **Email:** `admin@hostel.com`
+    - **Password:** `admin123`
+
+    As an admin, you can:
+    - Manage users (create, edit, delete)
+    - Approve or reject reservations
+    - View all bookings and statistics
+    - Configure rooms and beds
+  </Tab>
+
+  <Tab title="User Account">
+    Login as a regular member:
+
+    - **Email:** `user1@mail.com`
+    - **Password:** `user123`
+
+    As a user, you can:
+    - View the availability calendar
+    - Make new reservations
+    - Add companions to bookings
+    - View and cancel your reservations
+  </Tab>
+</Tabs>
+
+<Warning>
+  **Important:** Change these default passwords immediately! Use the admin panel to update passwords or see the security section below.
+</Warning>
+
+## Exploring the Admin Panel
+
+After logging in as admin, you'll see the dashboard (`viewAdmin.php`):
+
+### Dashboard Overview
+
+The admin dashboard displays:
+
+- **Statistics Cards**: Total users, pending reservations, occupancy rates
+- **Navigation Tabs**:
+  - Dashboard - Overview and metrics
+  - Users - User management (CRUD operations)
+  - Reservations - Pending approval queue
+  - Rooms - Room and bed status
+
+### Managing Users
+
+Navigate to the Users tab to:
+
+<CodeGroup>
+  ```php Create User Example (viewAdmin.php:27)
+  case 'crear_usuario':
+      $datos = [
+          'num_socio' => sanitize_input($_POST['num_socio']),
+          'dni'       => sanitize_input($_POST['dni']),
+          'telf'      => sanitize_input($_POST['telf']),
+          'email'     => sanitize_input($_POST['email']),
+          'nombre'    => sanitize_input($_POST['nombre']),
+          'apellido1' => sanitize_input($_POST['apellido1']),
+          'apellido2' => sanitize_input($_POST['apellido2']),
+          'password'  => $_POST['password'],
+          'rol'       => sanitize_input($_POST['rol']),
+      ];
+
+      if (crear_usuario($conexionPDO, $datos)) {
+          $mensaje = "Usuario creado exitosamente";
+      }
+  ```
+</CodeGroup>
+
+1. Click "Add New User"
+2. Fill in the user details (name, email, member number, etc.)
+3. Assign a role (admin or user)
+4. Set initial password
+5. Save the user
+
+### Approving Reservations
+
+Reservations require admin approval:
+
+1. Go to the Reservations tab
+2. Review pending reservations
+3. Click "Approve" or "Reject"
+4. Users are notified of the status change
+
+## Exploring the User Panel
+
+Log in as a user to see the member interface (`viewSocio.php`):
+
+### Making a Reservation
+
+<Steps>
+  <Step title="Select Dates">
+    Use the interactive calendar to:
+    - View available beds per day
+    - See color-coded availability indicators
+    - Click on a date range for booking
+  </Step>
+
+  <Step title="Choose Room and Beds">
+    Select your room and number of beds:
+
+    ```php Dynamic Bed Selection (viewSocio.php:50)
+    $datos_reserva = [
+        'id_usuario'    => $_SESSION['userId'],
+        'id_habitacion' => isset($_POST['id_habitacion']) ? (int) $_POST['id_habitacion'] : 0,
+        'numero_camas'  => $numero_camas,
+        'fecha_inicio'  => $_POST['fecha_inicio'] ?? '',
+        'fecha_fin'     => $_POST['fecha_fin'] ?? '',
+    ];
+
+    $id_reserva = crear_reserva($conexionPDO, $datos_reserva);
+    ```
+
+    The system dynamically shows available beds for your selected dates.
+  </Step>
+
+  <Step title="Add Companions (Optional)">
+    If booking multiple beds, add companion information:
+
+    - Member number (if companion is a member)
+    - Full name
+    - ID/DNI number
+    - Mark if they're a club member
+
+    ```php Companion Management (viewSocio.php:63)
+    foreach ($acompanantes as $acomp) {
+        if (!empty($acomp['dni'])) {
+            $datos_acomp = [
+                'num_socio' => $acomp['num_socio'] ?? null,
+                'es_socio'  => isset($acomp['es_socio']) && $acomp['es_socio'] === 'si',
+                'dni'       => $acomp['dni'] ?? '',
+                'nombre'    => $acomp['nombre'] ?? '',
+                'apellido1' => $acomp['apellido1'] ?? '',
+                'apellido2' => $acomp['apellido2'] ?? null,
+                'actividad' => $_POST['actividad'] ?? null,
+            ];
+            agregar_acompanante($conexionPDO, $id_reserva, $datos_acomp);
+        }
+    }
+    ```
+  </Step>
+
+  <Step title="Submit for Approval">
+    Submit your reservation:
+    - Add activity description (optional)
+    - Include any special comments
+    - Submit for admin approval
+
+    <Info>
+      You'll receive a confirmation message. Check "My Reservations" to track status.
+    </Info>
+  </Step>
+</Steps>
+
+## Verification
+
+To verify your installation is working correctly:
+
+### Using the Verification Script
+
+Run the included verification script:
+
+```bash
+php verificar_mysql.php
+```
+
+This checks:
+- Database connectivity
+- Table structure
+- Test data presence
+- PDO functionality
+
+### Manual Verification
+
+<Accordion title="Check Database Tables">
+  Connect to your database and verify tables exist:
+
+  ```sql
+  \c refugio
+  \dt
+  ```
+
+  You should see:
+  - usuarios
+  - habitaciones
+  - camas
+  - reservas
+  - acompanantes
+</Accordion>
+
+<Accordion title="Test User Authentication">
+  The login system uses secure password verification:
+
+  ```php Login Authentication (login.php:16)
+  $user = comprobar_username($conexionPDO, $email);
+
+  if ($user && password_verify($password, $user['password'])) {
+      session_regenerate_id(true);
+      $_SESSION['userId'] = $user['id'];
+      $_SESSION['user']   = htmlspecialchars($user['nombre'] . ' ' . $user['apellido1']);
+      $_SESSION['email']  = htmlspecialchars($email);
+      $_SESSION['rol']    = $user['rol'];
+
+      // Redirect based on role
+      if ($user['rol'] === 'user') {
+          header('Location: viewSocio.php');
+      } else if ($user['rol'] === 'admin') {
+          header('Location: viewAdmin.php');
+      }
+      exit;
+  }
+  ```
+</Accordion>
+
+## Common Quick Start Issues
+
+<AccordionGroup>
+  <Accordion title="Database Connection Failed">
+    **Error:** `SQLSTATE[08006] Connection failed`
+
+    **Solution:**
+    - Verify PostgreSQL is running: `pg_isready`
+    - Check credentials in `conexion.php`
+    - Ensure database `refugio` exists
+    - Verify PostgreSQL is listening on localhost:5432
+  </Accordion>
+
+  <Accordion title="Login Fails with Correct Credentials">
+    **Error:** Credentials invalid message
+
+    **Solution:**
+    - Ensure database was imported correctly
+    - Check if password hashing is working
+    - Verify PHP PDO extension is enabled
+    - Run: `php -m | grep pdo`
+  </Accordion>
+
+  <Accordion title="Session/Cookie Warnings">
+    **Error:** Headers already sent warnings
+
+    **Solution:**
+    - Ensure no output before `session_start()` in conexion.php
+    - Check for BOM in PHP files
+    - Verify no whitespace before `<?php` tags
+  </Accordion>
+
+  <Accordion title="Port 8000 Already in Use">
+    **Error:** Address already in use
+
+    **Solution:**
+    Use a different port:
+    ```bash
+    php -S localhost:8080
+    ```
+    Then access at `http://localhost:8080`
+  </Accordion>
+</AccordionGroup>
+
+## Security Checklist
+
+Before using in production:
+
+<Check>Change all default passwords</Check>
+<Check>Update `conexion.php` with strong database credentials</Check>
+<Check>Enable HTTPS (required for production)</Check>
+<Check>Review and update session cookie settings</Check>
+<Check>Set appropriate file permissions (644 for PHP files)</Check>
+<Check>Remove or secure `verificar_mysql.php`</Check>
+<Check>Configure error logging (disable display_errors)</Check>
+
+## Next Steps
+
+Now that you have Refugio running:
+
+<CardGroup cols={2}>
+  <Card title="Production Installation" icon="server" href="/installation">
+    Deploy Refugio to a production server with proper security
+  </Card>
+  <Card title="Configuration Guide" icon="gear" href="/configuration">
+    Customize settings, email notifications, and more
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference">
+    Learn about the available functions and endpoints
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/troubleshooting">
+    Solutions to common issues and error messages
+  </Card>
+</CardGroup>
+
+---
+
+**Congratulations! Your Refugio installation is ready.** Start exploring the features and customize it for your mountain refuge. 🏔️

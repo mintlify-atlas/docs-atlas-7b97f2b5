@@ -1,0 +1,528 @@
+---
+title: 'Room & Bed Management'
+description: 'Room and bed availability tracking with real-time status updates'
+icon: 'bed'
+---
+
+## Overview
+
+The room management system tracks room capacity, bed availability, and real-time occupancy status with automatic updates based on reservation state changes.
+
+## Database Structure
+
+<CardGroup cols={2}>
+<Card title="habitaciones (rooms)" icon="door-open">
+  ```sql
+  CREATE TABLE habitaciones (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      numero VARCHAR(10),
+      capacidad INT
+  );
+  ```
+</Card>
+
+<Card title="camas (beds)" icon="bed">
+  ```sql
+  CREATE TABLE camas (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      id_habitacion INT,
+      numero INT,
+      estado ENUM('libre', 'pendiente', 'reservada'),
+      FOREIGN KEY (id_habitacion) 
+          REFERENCES habitaciones(id)
+  );
+  ```
+</Card>
+</CardGroup>
+
+## Bed States
+
+Beds can be in one of three states:
+
+<Steps>
+  <Step title="libre (free)">
+    Bed is available for new reservations
+  </Step>
+  <Step title="pendiente (pending)">
+    Bed is assigned to a pending reservation awaiting approval
+  </Step>
+  <Step title="reservada (reserved)">
+    Bed is assigned to an approved reservation
+  </Step>
+</Steps>
+
+<Info>
+Bed status automatically updates when reservation status changes via `actualizar_estado_reserva()`.
+</Info>
+
+## Listing Rooms
+
+The `listar_habitaciones()` function in `functions.php:369-386` provides room overview with bed counts:
+
+<CodeGroup>
+```php functions.php - listar_habitaciones()
+function listar_habitaciones($conexion)
+{
+    try {
+        $stmt = $conexion->query("
+            SELECT h.id, h.numero, h.capacidad,
+                   COUNT(c.id) as total_camas,
+                   COUNT(CASE WHEN c.estado = 'libre' THEN 1 END) as camas_libres
+            FROM habitaciones h
+            LEFT JOIN camas c ON h.id = c.id_habitacion
+            GROUP BY h.id, h.numero, h.capacidad
+            ORDER BY h.numero
+        ");
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Error al listar habitaciones: " . $e->getMessage());
+        return [];
+    }
+}
+```
+</CodeGroup>
+
+### Result Structure
+
+```php
+[
+    [
+        'id' => 1,
+        'numero' => '101',
+        'capacidad' => 4,
+        'total_camas' => 4,
+        'camas_libres' => 2
+    ],
+    // ...
+]
+```
+
+## Checking Availability
+
+### By Date Range
+
+The `obtener_disponibilidad()` function in `functions.php:395-425` checks bed availability for specific dates:
+
+<CodeGroup>
+```php functions.php - obtener_disponibilidad()
+function obtener_disponibilidad($conexion, $fecha_inicio, $fecha_fin)
+{
+    try {
+        $stmt = $conexion->prepare("
+            SELECT c.id, c.numero, c.id_habitacion, h.numero as habitacion_numero,
+                   CASE
+                       WHEN EXISTS (
+                           SELECT 1
+                           FROM reservas_camas rc
+                           INNER JOIN reservas r ON rc.id_reserva = r.id
+                           WHERE rc.id_cama = c.id
+                           AND r.estado IN ('pendiente', 'reservada')
+                           AND (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
+                       ) THEN 'ocupada'
+                       ELSE 'libre'
+                   END as disponibilidad
+            FROM camas c
+            JOIN habitaciones h ON c.id_habitacion = h.id
+            ORDER BY h.numero, c.numero
+        ");
+
+        $stmt->bindParam(':fecha_inicio', $fecha_inicio);
+        $stmt->bindParam(':fecha_fin', $fecha_fin);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Error al obtener disponibilidad: " . $e->getMessage());
+        return [];
+    }
+}
+```
+</CodeGroup>
+
+<Note>
+The availability check considers both pending and approved reservations to prevent double-booking.
+</Note>
+
+### Count Total Beds
+
+From `functions.php:432-443`:
+
+<CodeGroup>
+```php functions.php - contar_total_camas()
+function contar_total_camas($conexion)
+{
+    try {
+        $stmt = $conexion->prepare("SELECT COUNT(*) as total FROM camas");
+        $stmt->execute();
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        return (int) $result['total'];
+    } catch (PDOException $e) {
+        error_log("Error al contar total camas: " . $e->getMessage());
+        return 0;
+    }
+}
+```
+</CodeGroup>
+
+### Count Free Beds by Date
+
+The `contar_camas_libres_por_fecha()` function in `functions.php:451-476` counts available beds for a specific date:
+
+<CodeGroup>
+```php functions.php - contar_camas_libres_por_fecha()
+function contar_camas_libres_por_fecha($conexion, $fecha)
+{
+    try {
+        $stmt = $conexion->prepare("
+            SELECT COUNT(*) as libres
+            FROM camas c
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM reservas_camas rc
+                INNER JOIN reservas r ON rc.id_reserva = r.id
+                WHERE rc.id_cama = c.id
+                AND r.estado IN ('pendiente', 'reservada')
+                AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+            )
+        ");
+
+        $stmt->bindParam(':fecha', $fecha);
+        $stmt->execute();
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return (int) $result['libres'];
+    } catch (PDOException $e) {
+        error_log("Error al contar camas libres: " . $e->getMessage());
+        return 0;
+    }
+}
+```
+</CodeGroup>
+
+## Getting Available Beds
+
+The `obtener_camas_disponibles()` function in `functions.php:487-527` finds specific available beds in a room:
+
+<CodeGroup>
+```php functions.php - obtener_camas_disponibles()
+function obtener_camas_disponibles($conexion, $id_habitacion, $fecha_inicio, 
+                                   $fecha_fin, $id_reserva_excluir = null)
+{
+    try {
+        $sql = "
+            SELECT id, numero FROM camas
+            WHERE id_habitacion = :id_habitacion
+            AND id NOT IN (
+                SELECT DISTINCT c.id
+                FROM camas c
+                INNER JOIN reservas_camas rc ON c.id = rc.id_cama
+                INNER JOIN reservas r ON rc.id_reserva = r.id
+                WHERE c.id_habitacion = :id_habitacion
+                AND r.estado IN ('pendiente', 'reservada')
+                AND (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
+        ";
+
+        // Exclude current reservation when editing
+        if ($id_reserva_excluir !== null) {
+            $sql .= " AND r.id != :id_reserva_excluir";
+        }
+
+        $sql .= "
+            )
+            ORDER BY numero
+        ";
+
+        $stmt = $conexion->prepare($sql);
+        $stmt->bindParam(':id_habitacion', $id_habitacion, PDO::PARAM_INT);
+        $stmt->bindParam(':fecha_inicio', $fecha_inicio);
+        $stmt->bindParam(':fecha_fin', $fecha_fin);
+
+        if ($id_reserva_excluir !== null) {
+            $stmt->bindParam(':id_reserva_excluir', $id_reserva_excluir, PDO::PARAM_INT);
+        }
+
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Error al obtener camas disponibles: " . $e->getMessage());
+        return [];
+    }
+}
+```
+</CodeGroup>
+
+<Tip>
+The `$id_reserva_excluir` parameter allows a reservation to be edited without considering its own beds as occupied.
+</Tip>
+
+## Available Rooms with Capacity
+
+The `obtener_habitaciones_disponibles()` function in `functions.php:559-610` returns rooms with available bed counts:
+
+<CodeGroup>
+```php functions.php - obtener_habitaciones_disponibles()
+function obtener_habitaciones_disponibles($conexion, $fecha_inicio, $fecha_fin)
+{
+    try {
+        // Check for whole refuge reservation
+        $stmt_check = $conexion->prepare("
+            SELECT COUNT(*) as total
+            FROM reservas
+            WHERE id_habitacion IS NULL
+            AND estado IN ('pendiente', 'reservada')
+            AND (fecha_inicio <= :fecha_fin AND fecha_fin >= :fecha_inicio)
+        ");
+        $stmt_check->bindParam(':fecha_inicio', $fecha_inicio);
+        $stmt_check->bindParam(':fecha_fin', $fecha_fin);
+        $stmt_check->execute();
+        $resultado_check = $stmt_check->fetch(PDO::FETCH_ASSOC);
+
+        // If whole refuge is reserved, no rooms available
+        if ($resultado_check['total'] > 0) {
+            return [];
+        }
+
+        // Get rooms with available bed counts
+        $stmt = $conexion->prepare("
+            SELECT
+                h.id,
+                h.numero,
+                h.capacidad,
+                (SELECT COUNT(*) FROM camas WHERE id_habitacion = h.id) as camas_totales,
+                (SELECT COUNT(*) FROM camas WHERE id_habitacion = h.id) -
+                (SELECT COUNT(DISTINCT rc.id_cama)
+                 FROM reservas_camas rc
+                 INNER JOIN reservas r ON rc.id_reserva = r.id
+                 INNER JOIN camas c ON rc.id_cama = c.id
+                 WHERE c.id_habitacion = h.id
+                 AND r.estado IN ('pendiente', 'reservada')
+                 AND (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
+                ) as camas_disponibles
+            FROM habitaciones h
+            HAVING camas_disponibles > 0
+            ORDER BY h.numero
+        ");
+
+        $stmt->bindParam(':fecha_inicio', $fecha_inicio);
+        $stmt->bindParam(':fecha_fin', $fecha_fin);
+        $stmt->execute();
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Error al obtener habitaciones disponibles: " . $e->getMessage());
+        return [];
+    }
+}
+```
+</CodeGroup>
+
+<Warning>
+If the entire refuge is reserved (`id_habitacion IS NULL`), this function returns an empty array to prevent partial bookings.
+</Warning>
+
+## Real-Time Availability API
+
+The `disponibilidad.php` file provides an AJAX endpoint for checking room availability:
+
+<CodeGroup>
+```php disponibilidad.php
+<?php
+require 'conexion.php';
+require 'functions.php';
+
+// Verify AJAX request parameters
+if (!isset($_GET['fecha_inicio']) || !isset($_GET['fecha_fin'])) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Parámetros incompletos']);
+    exit;
+}
+
+$fecha_inicio = $_GET['fecha_inicio'];
+$fecha_fin    = $_GET['fecha_fin'];
+
+// Validate date format
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_inicio) ||
+    !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha_fin)) {
+    http_response_code(400);
+    echo json_encode(['error' => 'Formato de fecha inválido']);
+    exit;
+}
+
+// Get available rooms with bed counts
+$habitaciones_disponibles = obtener_habitaciones_disponibles(
+    $conexionPDO, 
+    $fecha_inicio, 
+    $fecha_fin
+);
+
+// Return JSON
+header('Content-Type: application/json');
+echo json_encode($habitaciones_disponibles);
+```
+</CodeGroup>
+
+### API Usage
+
+<CodeGroup>
+```javascript Client-side Example
+fetch(`disponibilidad.php?fecha_inicio=${inicio}&fecha_fin=${fin}`)
+    .then(response => response.json())
+    .then(habitaciones => {
+        habitaciones.forEach(hab => {
+            console.log(`Room ${hab.numero}: ${hab.camas_disponibles} beds available`);
+        });
+    });
+```
+</CodeGroup>
+
+### Response Format
+
+```json
+[
+    {
+        "id": 1,
+        "numero": "101",
+        "capacidad": 4,
+        "camas_totales": 4,
+        "camas_disponibles": 2
+    },
+    {
+        "id": 2,
+        "numero": "102",
+        "capacidad": 6,
+        "camas_totales": 6,
+        "camas_disponibles": 6
+    }
+]
+```
+
+## Dashboard Display
+
+The admin dashboard shows room status using `viewAdmin.php:857-883`:
+
+<CodeGroup>
+```php viewAdmin.php - Room Status Display
+<div class="card shadow-sm mt-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-building"></i> Estado de Habitaciones</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <?php foreach ($habitaciones as $hab): ?>
+                <div class="col-md-6 mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6>Habitación <?php echo $hab['numero'] ?></h6>
+                            <div class="progress mb-2">
+                                <?php
+                                    $porcentaje = ($hab['camas_libres'] / $hab['total_camas']) * 100;
+                                    $color = $porcentaje > 50 ? 'success' 
+                                           : ($porcentaje > 20 ? 'warning' : 'danger');
+                                ?>
+                                <div class="progress-bar bg-<?php echo $color ?>" 
+                                     style="width:<?php echo $porcentaje ?>%"></div>
+                            </div>
+                            <small><?php echo $hab['camas_libres'] ?> de 
+                                   <?php echo $hab['total_camas'] ?> camas libres</small>
+                        </div>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</div>
+```
+</CodeGroup>
+
+## Bed Assignment Logic
+
+When creating or updating reservations, beds are assigned in numerical order:
+
+```sql
+SELECT id FROM camas
+WHERE id_habitacion = :id_habitacion
+AND id NOT IN (
+    -- Exclude already reserved beds
+)
+ORDER BY numero  -- Assign lowest numbered beds first
+LIMIT :numero_camas
+```
+
+<Info>
+This ensures beds are assigned consistently and predictably, filling rooms from the lowest bed number upward.
+</Info>
+
+## Automatic Status Updates
+
+Bed status updates automatically when reservation status changes via `actualizar_estado_reserva()` in `functions.php:1188-1201`:
+
+<CodeGroup>
+```php functions.php
+// Determine bed status based on reservation status
+$estado_cama = 'libre';
+if ($estado === 'reservada') {
+    $estado_cama = 'reservada';
+} elseif ($estado === 'pendiente') {
+    $estado_cama = 'pendiente';
+}
+
+$stmt_update = $conexion->prepare(
+    "UPDATE camas SET estado = :estado WHERE id = :id_cama"
+);
+$stmt_update->bindParam(':estado', $estado_cama);
+
+foreach ($camas as $id_cama) {
+    $stmt_update->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
+    $stmt_update->execute();
+}
+```
+</CodeGroup>
+
+## Usage Examples
+
+### Check availability for dates
+
+```php
+$fecha_inicio = '2024-03-15';
+$fecha_fin = '2024-03-17';
+
+$habitaciones = obtener_habitaciones_disponibles(
+    $conexionPDO, 
+    $fecha_inicio, 
+    $fecha_fin
+);
+
+foreach ($habitaciones as $hab) {
+    echo "Room {$hab['numero']}: {$hab['camas_disponibles']} beds available\n";
+}
+```
+
+### Get specific available beds
+
+```php
+$id_habitacion = 1;
+$fecha_inicio = '2024-03-15';
+$fecha_fin = '2024-03-17';
+
+$camas = obtener_camas_disponibles(
+    $conexionPDO, 
+    $id_habitacion, 
+    $fecha_inicio, 
+    $fecha_fin
+);
+
+echo "Available beds: " . count($camas) . "\n";
+foreach ($camas as $cama) {
+    echo "Bed #{$cama['numero']}\n";
+}
+```
+
+### Count free beds for today
+
+```php
+$hoy = date('Y-m-d');
+$camas_libres = contar_camas_libres_por_fecha($conexionPDO, $hoy);
+$total_camas = contar_total_camas($conexionPDO);
+
+echo "Today: $camas_libres / $total_camas beds free\n";
+```

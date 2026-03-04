@@ -1,0 +1,747 @@
+---
+title: 'Security Best Practices'
+description: 'Security guidelines and best practices for the Refugio reservation system'
+---
+
+# Security Best Practices
+
+This guide covers security features, best practices, and production deployment considerations for the Refugio mountain refuge reservation system.
+
+## Built-in Security Features
+
+The Refugio system implements several security measures to protect user data and prevent attacks.
+
+### Password Security
+
+<Card title="Bcrypt Password Hashing" icon="lock">
+  The system uses PHP's `password_hash()` function with `PASSWORD_BCRYPT` to securely store passwords.
+  
+  **What this means**:
+  - Passwords are never stored in plain text
+  - Each password has a unique salt
+  - Even administrators cannot see user passwords
+  - Passwords are verified using `password_verify()` during login
+</Card>
+
+**Implementation** (from `functions.php:75`):
+```php
+$password_hash = password_hash($datos['password'], PASSWORD_BCRYPT);
+```
+
+**Verification** (from `login.php:19`):
+```php
+if ($user && password_verify($password, $user['password'])) {
+    // Login successful
+}
+```
+
+### Session Security
+
+<Card title="Session Fixation Prevention" icon="shield">
+  The system regenerates session IDs on login to prevent session fixation attacks.
+</Card>
+
+**Implementation** (from `login.php:20` and `viewAdmin.php:14`):
+```php
+session_regenerate_id(true); // Prevents session fixation attacks
+```
+
+**How it works**:
+1. User logs in with credentials
+2. Old session ID is destroyed
+3. New session ID is generated
+4. User is associated with the new session
+
+This prevents attackers from hijacking sessions by fixing session IDs.
+
+### Input Sanitization
+
+<Card title="XSS Protection" icon="code">
+  All user inputs are sanitized using the `sanitize_input()` function to prevent Cross-Site Scripting (XSS) attacks.
+</Card>
+
+**Implementation** (from `functions.php:1452`):
+```php
+function sanitize_input($data)
+{
+    $data = trim($data);                                    // Remove whitespace
+    $data = stripslashes($data);                            // Remove backslashes
+    $data = htmlspecialchars($data, ENT_QUOTES, 'UTF-8');  // Escape HTML entities
+    return $data;
+}
+```
+
+**Usage** (from `viewAdmin.php:28-37`):
+```php
+$datos = [
+    'num_socio' => sanitize_input($_POST['num_socio']),
+    'dni'       => sanitize_input($_POST['dni']),
+    'email'     => sanitize_input($_POST['email']),
+    // ... all user inputs are sanitized
+];
+```
+
+### SQL Injection Prevention
+
+<Card title="Prepared Statements" icon="database">
+  All database queries use PDO prepared statements with parameter binding to prevent SQL injection.
+</Card>
+
+**Example** (from `functions.php:16`):
+```php
+$stmt = $conexion->prepare("SELECT id, email, password, rol, nombre, apellido1 FROM usuarios WHERE email = :email");
+$stmt->bindParam(':email', $email);
+$stmt->execute();
+```
+
+**Why this is secure**:
+- User input is never directly concatenated into SQL queries
+- Parameters are properly escaped by PDO
+- SQL injection attacks are effectively prevented
+
+### Role-Based Access Control
+
+<Card title="Authentication & Authorization" icon="user-shield">
+  The system enforces role-based access control with strict session validation.
+</Card>
+
+**Admin panel protection** (from `viewAdmin.php:10-13`):
+```php
+if (!isset($_SESSION['userId']) || $_SESSION['rol'] !== 'admin') {
+    header('Location: login.php');
+    exit;
+}
+```
+
+**User panel protection** (from `viewSocio.php:11-14`):
+```php
+if (!isset($_SESSION['userId']) || ($_SESSION['rol'] ?? '') !== 'user') {
+    header('Location: login.php');
+    exit;
+}
+```
+
+**Protected admin user** (from `viewAdmin.php:52-58`):
+```php
+// Prevent modification of main admin account
+$usuario_actual = obtener_usuario($conexionPDO, $id);
+if ($usuario_actual && $usuario_actual['email'] === 'admin@hostel.com') {
+    $mensaje = "No se puede modificar el usuario administrador principal";
+    $tipo_mensaje = 'danger';
+    break;
+}
+```
+
+## Password Management
+
+### Creating Strong Passwords
+
+<Steps>
+  <Step title="Minimum requirements">
+    While the system doesn't enforce complexity, follow these guidelines:
+    - **Minimum 8 characters** (preferably 12+)
+    - **Mix of uppercase and lowercase** letters
+    - **Include numbers** and special characters
+    - **Avoid common words** or personal information
+  </Step>
+  
+  <Step title="Use a password manager">
+    Consider using a password manager to:
+    - Generate strong, unique passwords
+    - Store passwords securely
+    - Automatically fill login forms
+  </Step>
+</Steps>
+
+**Good password examples**:
+- `Tr4il$Runner2024!`
+- `M0unt@inH!ke#89`
+- `Refug10*Climb3r`
+
+**Bad password examples** (never use these):
+- `password123`
+- `admin`
+- `123456`
+- Your name or club name
+
+### Changing Your Password
+
+<Tabs>
+  <Tab title="For Members">
+    <Steps>
+      <Step title="Navigate to profile">
+        Click **Mi Perfil** in the sidebar
+      </Step>
+      
+      <Step title="Enter current password">
+        Provide your current password for verification
+      </Step>
+      
+      <Step title="Enter new password">
+        Type your new strong password twice
+      </Step>
+      
+      <Step title="Save changes">
+        Click "Cambiar Contraseña"
+      </Step>
+    </Steps>
+  </Tab>
+  
+  <Tab title="For Administrators">
+    Administrators can reset user passwords:
+    
+    <Steps>
+      <Step title="Edit user">
+        In the Users section, click edit for the user
+      </Step>
+      
+      <Step title="Enter new password">
+        Fill in the password field with a new password
+      </Step>
+      
+      <Step title="Save">
+        Click "Actualizar Usuario"
+      </Step>
+      
+      <Step title="Inform the user">
+        Securely communicate the new password to the user
+      </Step>
+    </Steps>
+    
+    <Warning>
+      Never send passwords via email. Use a secure communication channel.
+    </Warning>
+  </Tab>
+</Tabs>
+
+### Password Reset Workflow
+
+If a user forgets their password:
+
+<Steps>
+  <Step title="User contacts administrator">
+    User requests a password reset via secure communication
+  </Step>
+  
+  <Step title="Administrator verifies identity">
+    Admin confirms the user's identity using member number and other details
+  </Step>
+  
+  <Step title="Administrator resets password">
+    Admin sets a temporary password via user edit form
+  </Step>
+  
+  <Step title="Secure communication">
+    Admin communicates the temporary password securely (in person, phone, or encrypted message)
+  </Step>
+  
+  <Step title="User changes password">
+    User logs in with temporary password and immediately changes it
+  </Step>
+</Steps>
+
+<Note>
+  Consider implementing a self-service password reset system with email verification for improved security and user experience.
+</Note>
+
+## HTTPS and Transport Security
+
+### Why HTTPS is Critical
+
+<Warning>
+  **Never run the Refugio system over HTTP in production.** All data, including passwords, is transmitted in plain text over HTTP.
+</Warning>
+
+**Without HTTPS**:
+- Passwords sent in plain text during login
+- Session cookies can be intercepted
+- All user data is visible to network attackers
+- Man-in-the-middle attacks are possible
+
+**With HTTPS**:
+- All communication is encrypted
+- Passwords and data are protected in transit
+- Session cookies are secure
+- Users can trust the connection
+
+### Implementing HTTPS
+
+<Steps>
+  <Step title="Obtain an SSL/TLS certificate">
+    Options:
+    - **Let's Encrypt**: Free, automated certificates (recommended)
+    - **Commercial CA**: Purchase from Digicert, Sectigo, etc.
+    - **Self-signed**: Only for testing, never for production
+  </Step>
+  
+  <Step title="Configure your web server">
+    
+    **For Apache** (`httpd.conf` or virtual host):
+    ```apache
+    <VirtualHost *:443>
+        ServerName refugio.yourclub.com
+        
+        SSLEngine on
+        SSLCertificateFile /path/to/certificate.crt
+        SSLCertificateKeyFile /path/to/private.key
+        SSLCertificateChainFile /path/to/chain.crt
+        
+        # Strong SSL configuration
+        SSLProtocol all -SSLv2 -SSLv3 -TLSv1 -TLSv1.1
+        SSLCipherSuite HIGH:!aNULL:!MD5
+        
+        DocumentRoot /var/www/refugio
+        # ... rest of configuration
+    </VirtualHost>
+    ```
+    
+    **For Nginx** (`nginx.conf`):
+    ```nginx
+    server {
+        listen 443 ssl http2;
+        server_name refugio.yourclub.com;
+        
+        ssl_certificate /path/to/certificate.crt;
+        ssl_certificate_key /path/to/private.key;
+        
+        # Strong SSL configuration
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers on;
+        
+        root /var/www/refugio;
+        # ... rest of configuration
+    }
+    ```
+  </Step>
+  
+  <Step title="Redirect HTTP to HTTPS">
+    Force all traffic to use HTTPS:
+    
+    **Apache** (`.htaccess`):
+    ```apache
+    RewriteEngine On
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+    ```
+    
+    **Nginx**:
+    ```nginx
+    server {
+        listen 80;
+        server_name refugio.yourclub.com;
+        return 301 https://$server_name$request_uri;
+    }
+    ```
+  </Step>
+  
+  <Step title="Test your configuration">
+    Use [SSL Labs SSL Test](https://www.ssllabs.com/ssltest/) to verify:
+    - Certificate is valid and trusted
+    - Strong cipher suites are used
+    - No security warnings
+    - Grade A or A+ rating
+  </Step>
+</Steps>
+
+### Secure Session Cookies
+
+Modify session settings for HTTPS (in `conexion.php` or main config file):
+
+```php
+// Set secure session cookie parameters
+ini_set('session.cookie_httponly', 1);  // Prevent JavaScript access
+ini_set('session.cookie_secure', 1);     // Only send over HTTPS
+ini_set('session.cookie_samesite', 'Strict'); // CSRF protection
+
+session_start();
+```
+
+## CSRF Protection
+
+### Current State
+
+The current Refugio system **does not implement CSRF tokens**. This should be added for production deployments.
+
+### Implementing CSRF Protection
+
+<Steps>
+  <Step title="Generate CSRF token on login">
+    Add to `login.php` after successful authentication:
+    
+    ```php
+    // Generate CSRF token
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    ```
+  </Step>
+  
+  <Step title="Include token in all forms">
+    Add a hidden field to every POST form:
+    
+    ```php
+    <form method="post" action="viewAdmin.php">
+        <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+        <!-- rest of form fields -->
+    </form>
+    ```
+  </Step>
+  
+  <Step title="Validate token on submission">
+    At the start of form processing:
+    
+    ```php
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        // Verify CSRF token
+        if (!isset($_POST['csrf_token']) || 
+            $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+            die('CSRF token validation failed');
+        }
+        
+        // Process form...
+    }
+    ```
+  </Step>
+  
+  <Step title="Regenerate token after use (optional)">
+    For extra security, regenerate after each request:
+    
+    ```php
+    // After validating token
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    ```
+  </Step>
+</Steps>
+
+## Production Deployment Checklist
+
+Before deploying to production, ensure all security measures are in place:
+
+### Pre-Deployment Security
+
+<Card title="Critical Security Items">
+  <Steps>
+    <Step title="Disable error display">
+      ```php
+      // In production configuration
+      ini_set('display_errors', 0);
+      ini_set('display_startup_errors', 0);
+      error_reporting(0);
+      
+      // Log errors instead
+      ini_set('log_errors', 1);
+      ini_set('error_log', '/var/log/php-errors.log');
+      ```
+    </Step>
+    
+    <Step title="Remove development code">
+      Remove or comment out (from `viewAdmin.php:2-4` and `viewSocio.php:6-8`):
+      ```php
+      // DELETE THESE LINES IN PRODUCTION:
+      ini_set('display_errors', 1);
+      ini_set('display_startup_errors', 1);
+      error_reporting(E_ALL);
+      ```
+    </Step>
+    
+    <Step title="Secure database credentials">
+      - Store database credentials in a file outside the web root
+      - Use environment variables for sensitive configuration
+      - Restrict file permissions: `chmod 600 config.php`
+    </Step>
+    
+    <Step title="Change default admin password">
+      - Change password for `admin@hostel.com`
+      - Use a strong, unique password
+      - Store it in a password manager
+    </Step>
+    
+    <Step title="Enable HTTPS">
+      - Install valid SSL certificate
+      - Configure secure session cookies
+      - Redirect all HTTP to HTTPS
+    </Step>
+    
+    <Step title="Implement CSRF protection">
+      - Add CSRF tokens to all forms
+      - Validate tokens on submission
+    </Step>
+  </Steps>
+</Card>
+
+### Server Configuration
+
+<Card title="Web Server Security">
+  <Steps>
+    <Step title="Restrict file permissions">
+      ```bash
+      # Set ownership
+      chown -R www-data:www-data /var/www/refugio
+      
+      # Set directory permissions
+      find /var/www/refugio -type d -exec chmod 755 {} \;
+      
+      # Set file permissions
+      find /var/www/refugio -type f -exec chmod 644 {} \;
+      
+      # Protect sensitive files
+      chmod 600 /var/www/refugio/conexion.php
+      ```
+    </Step>
+    
+    <Step title="Disable directory listing">
+      **Apache** (`.htaccess`):
+      ```apache
+      Options -Indexes
+      ```
+      
+      **Nginx**:
+      ```nginx
+      autoindex off;
+      ```
+    </Step>
+    
+    <Step title="Protect sensitive files">
+      **Apache** (`.htaccess`):
+      ```apache
+      <FilesMatch "\.(ini|log|conf|sql)$">
+          Require all denied
+      </FilesMatch>
+      ```
+    </Step>
+    
+    <Step title="Set security headers">
+      **Apache** (`.htaccess`):
+      ```apache
+      Header always set X-Frame-Options "DENY"
+      Header always set X-Content-Type-Options "nosniff"
+      Header always set X-XSS-Protection "1; mode=block"
+      Header always set Referrer-Policy "strict-origin-when-cross-origin"
+      ```
+      
+      **Nginx**:
+      ```nginx
+      add_header X-Frame-Options "DENY";
+      add_header X-Content-Type-Options "nosniff";
+      add_header X-XSS-Protection "1; mode=block";
+      add_header Referrer-Policy "strict-origin-when-cross-origin";
+      ```
+    </Step>
+  </Steps>
+</Card>
+
+### Database Security
+
+<Card title="MySQL/MariaDB Configuration">
+  <Steps>
+    <Step title="Use dedicated database user">
+      ```sql
+      -- Create database user with limited privileges
+      CREATE USER 'refugio_app'@'localhost' IDENTIFIED BY 'strong_password_here';
+      
+      -- Grant only necessary privileges
+      GRANT SELECT, INSERT, UPDATE, DELETE ON refugio_db.* TO 'refugio_app'@'localhost';
+      
+      -- Do NOT grant DROP, CREATE, ALTER in production
+      FLUSH PRIVILEGES;
+      ```
+    </Step>
+    
+    <Step title="Regular backups">
+      Set up automated database backups:
+      ```bash
+      # Example cron job (daily at 2 AM)
+      0 2 * * * mysqldump -u backup_user -p'password' refugio_db | gzip > /backups/refugio_$(date +\%Y\%m\%d).sql.gz
+      ```
+    </Step>
+    
+    <Step title="Restrict database access">
+      ```sql
+      -- Bind to localhost only (in my.cnf)
+      [mysqld]
+      bind-address = 127.0.0.1
+      ```
+    </Step>
+  </Steps>
+</Card>
+
+### File Upload Security
+
+For profile photos (referenced in `viewSocio.php`):
+
+<Steps>
+  <Step title="Validate file types">
+    The system already validates (from `functions.php:1492`):
+    ```php
+    $formatos_permitidos = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+    $extensiones_permitidas = ['jpg', 'jpeg', 'png', 'gif'];
+    ```
+  </Step>
+  
+  <Step title="Limit file size">
+    Maximum 5MB is enforced (from `functions.php:1494`):
+    ```php
+    $max_size = 5 * 1024 * 1024; // 5MB
+    ```
+  </Step>
+  
+  <Step title="Store uploads outside web root">
+    Best practice: Store uploaded files outside the public web directory
+    ```php
+    $upload_dir = '/var/uploads/refugio/photos/';
+    // Serve files through a PHP script that validates access
+    ```
+  </Step>
+  
+  <Step title="Sanitize filenames">
+    ```php
+    $filename = preg_replace('/[^a-zA-Z0-9._-]/', '', $filename);
+    $filename = uniqid() . '_' . $filename; // Prevent collisions
+    ```
+  </Step>
+</Steps>
+
+## Monitoring and Auditing
+
+### Enable Logging
+
+Implement comprehensive logging:
+
+```php
+// Log authentication attempts
+function log_auth_attempt($email, $success, $ip) {
+    $status = $success ? 'SUCCESS' : 'FAILED';
+    error_log("[AUTH] $status login attempt for $email from $ip");
+}
+
+// Log administrative actions
+function log_admin_action($admin_id, $action, $details) {
+    error_log("[ADMIN] User $admin_id performed $action: $details");
+}
+```
+
+### Monitor for Security Issues
+
+<Card title="Security Monitoring">
+  - **Failed login attempts**: Monitor for brute force attacks
+  - **Unusual reservation patterns**: Detect abuse or suspicious activity
+  - **Database errors**: Watch for SQL injection attempts
+  - **File upload attempts**: Monitor for malicious file uploads
+  - **Session anomalies**: Detect session hijacking attempts
+</Card>
+
+### Regular Security Audits
+
+<Steps>
+  <Step title="Weekly tasks">
+    - Review authentication logs for failed attempts
+    - Check for unusual user account activity
+    - Monitor reservation patterns
+  </Step>
+  
+  <Step title="Monthly tasks">
+    - Review user accounts and remove inactive ones
+    - Update dependencies (PHP, web server, database)
+    - Check for security updates
+    - Review and rotate admin passwords
+  </Step>
+  
+  <Step title="Quarterly tasks">
+    - Full security audit
+    - Penetration testing
+    - Review and update security policies
+    - Test backup restoration procedures
+  </Step>
+</Steps>
+
+## Incident Response
+
+If you suspect a security breach:
+
+<Steps>
+  <Step title="Immediate actions">
+    1. **Take the system offline** if actively being attacked
+    2. **Change all admin passwords** immediately
+    3. **Review access logs** for unauthorized access
+    4. **Check database** for unauthorized modifications
+  </Step>
+  
+  <Step title="Investigation">
+    1. **Identify the breach vector**: How did the attacker gain access?
+    2. **Assess the damage**: What data was accessed or modified?
+    3. **Document everything**: Keep detailed notes for analysis
+  </Step>
+  
+  <Step title="Remediation">
+    1. **Patch the vulnerability** that allowed the breach
+    2. **Restore from clean backups** if data was compromised
+    3. **Implement additional security measures**
+    4. **Notify affected users** if their data was compromised
+  </Step>
+  
+  <Step title="Prevention">
+    1. **Conduct post-incident review**
+    2. **Update security procedures** based on lessons learned
+    3. **Implement additional monitoring**
+    4. **Provide security training** to administrators
+  </Step>
+</Steps>
+
+## Additional Security Recommendations
+
+### Rate Limiting
+
+Implement rate limiting to prevent brute force attacks:
+
+```php
+// Example rate limiting for login attempts
+function check_rate_limit($ip) {
+    $max_attempts = 5;
+    $time_window = 300; // 5 minutes
+    
+    // Check attempts from IP in time window
+    // Implementation depends on your session/cache storage
+    // Return true if allowed, false if rate limited
+}
+```
+
+### Two-Factor Authentication (Future Enhancement)
+
+Consider implementing 2FA for administrator accounts:
+
+- Use TOTP (Time-based One-Time Password)
+- Libraries: GoogleAuthenticator, etc.
+- Require for all admin logins
+
+### Security Headers
+
+Implement Content Security Policy (CSP):
+
+```php
+header("Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' cdn.jsdelivr.net;");
+```
+
+### Regular Updates
+
+<Warning>
+  Keep all software up to date:
+  - PHP version
+  - Web server (Apache/Nginx)
+  - Database (MySQL/MariaDB)
+  - Operating system security patches
+</Warning>
+
+## Summary
+
+Security is an ongoing process, not a one-time setup. Regular monitoring, updates, and adherence to these best practices will keep your Refugio system secure and protect your users' data.
+
+**Key takeaways**:
+- ✅ Use HTTPS in production (mandatory)
+- ✅ Implement CSRF protection
+- ✅ Disable error display in production
+- ✅ Use strong passwords and rotate regularly
+- ✅ Monitor logs for suspicious activity
+- ✅ Keep software updated
+- ✅ Regular security audits
+- ✅ Have an incident response plan
+
+For technical implementation details, refer to the source code files referenced throughout this guide.

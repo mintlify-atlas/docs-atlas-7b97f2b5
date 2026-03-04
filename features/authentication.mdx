@@ -1,0 +1,316 @@
+---
+title: 'Authentication System'
+description: 'Role-based authentication with secure password handling and session management'
+icon: 'shield-check'
+---
+
+## Overview
+
+The Refugio authentication system implements secure login with role-based access control, password hashing using bcrypt, and session management with anti-hijacking protections.
+
+## User Roles
+
+The system supports two distinct roles:
+
+- **admin**: Full system access including user management, reservation approval, and special reservations
+- **user**: Standard members who can create reservations, view availability, and manage their own bookings
+
+## Login Flow
+
+### Authentication Process
+
+The login is handled in `login.php:12-40` with secure credential verification:
+
+<CodeGroup>
+```php login.php
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $email    = trim($_POST['user']);
+    $password = trim($_POST['password']);
+
+    $user = comprobar_username($conexionPDO, $email);
+
+    if ($user && password_verify($password, $user['password'])) {
+        session_regenerate_id(true); // Prevents session fixation attacks
+        $_SESSION['userId'] = $user['id'];
+        $_SESSION['user']   = htmlspecialchars($user['nombre'] . ' ' . $user['apellido1']);
+        $_SESSION['email']  = htmlspecialchars($email);
+        $_SESSION['rol']    = $user['rol'];
+
+        // Store last visit in cookie
+        setcookie('ultima_visita_' . $user['rol'], date('Y-m-d H:i:s'), 
+                  time() + 365 * 24 * 3600, '/', '', false, true);
+
+        // Redirect based on role
+        if ($user['rol'] === 'user') {
+            header('Location: viewSocio.php');
+        } else if ($user['rol'] === 'admin') {
+            header('Location: viewAdmin.php');
+        }
+        exit;
+    } else {
+        $error = 'Credenciales inválidas';
+    }
+}
+```
+</CodeGroup>
+
+### Database User Lookup
+
+The `comprobar_username()` function in `functions.php:13-25` uses prepared statements to prevent SQL injection:
+
+<CodeGroup>
+```php functions.php
+function comprobar_username($conexion, $email)
+{
+    try {
+        $stmt = $conexion->prepare(
+            "SELECT id, email, password, rol, nombre, apellido1 
+             FROM usuarios WHERE email = :email"
+        );
+        $stmt->bindParam(':email', $email);
+        $stmt->execute();
+        $user = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $user ? $user : false;
+    } catch (PDOException $e) {
+        error_log("Error al comprobar usuario: " . $e->getMessage());
+        return false;
+    }
+}
+```
+</CodeGroup>
+
+<Note>
+The system uses `password_verify()` which is resistant to timing attacks and automatically handles bcrypt hash comparison.
+</Note>
+
+## Security Features
+
+### Password Hashing
+
+Passwords are hashed using bcrypt (PASSWORD_BCRYPT) with automatic salt generation:
+
+<CodeGroup>
+```php functions.php
+function crear_usuario($conexion, $datos)
+{
+    try {
+        $password_hash = password_hash($datos['password'], PASSWORD_BCRYPT);
+
+        $stmt = $conexion->prepare("
+            INSERT INTO usuarios (num_socio, dni, telf, email, nombre, 
+                                 apellido1, apellido2, password, rol)
+            VALUES (:num_socio, :dni, :telf, :email, :nombre, 
+                   :apellido1, :apellido2, :password, :rol)
+        ");
+
+        // Bind parameters...
+        $stmt->bindParam(':password', $password_hash);
+        // ...
+        
+        return $stmt->execute();
+    } catch (PDOException $e) {
+        error_log("Error al crear usuario: " . $e->getMessage());
+        return false;
+    }
+}
+```
+</CodeGroup>
+
+### Session Fixation Prevention
+
+Session IDs are regenerated on login to prevent session fixation attacks:
+
+```php
+session_regenerate_id(true); // login.php:20
+```
+
+Additionally, session regeneration occurs on protected pages:
+
+```php viewAdmin.php:14
+session_regenerate_id(true); // Prevents session fixation attacks
+```
+
+### SQL Injection Protection
+
+All database queries use PDO prepared statements with parameter binding:
+
+<CodeGroup>
+```php Example: Parameterized Query
+$stmt = $conexion->prepare(
+    "SELECT * FROM usuarios WHERE id = :id"
+);
+$stmt->bindParam(':id', $id, PDO::PARAM_INT);
+$stmt->execute();
+```
+</CodeGroup>
+
+<Warning>
+Never concatenate user input directly into SQL queries. Always use prepared statements with bound parameters.
+</Warning>
+
+## Access Control
+
+### Authentication Check
+
+Protected pages verify authentication in `auth.php:8-11`:
+
+<CodeGroup>
+```php auth.php
+if (!isset($_SESSION['userId'])) {
+    header('Location: login.php');
+    exit;
+}
+```
+</CodeGroup>
+
+### Role-Based Access
+
+Admin pages check both authentication and role:
+
+<CodeGroup>
+```php viewAdmin.php
+if (!isset($_SESSION['userId']) || $_SESSION['rol'] !== 'admin') {
+    header('Location: login.php');
+    exit;
+}
+session_regenerate_id(true);
+```
+</CodeGroup>
+
+User pages verify user role:
+
+<CodeGroup>
+```php viewSocio.php
+if (!isset($_SESSION['userId']) || ($_SESSION['rol'] ?? '') !== 'user') {
+    header('Location: login.php');
+    exit;
+}
+session_regenerate_id(true);
+```
+</CodeGroup>
+
+## Session Data Structure
+
+After successful login, the session contains:
+
+```php
+$_SESSION = [
+    'userId' => 1,                    // User ID from database
+    'user'   => 'Juan Pérez',        // Display name (sanitized)
+    'email'  => 'user@example.com',  // Email (sanitized)
+    'rol'    => 'admin'              // Role: 'admin' or 'user'
+];
+```
+
+## Cookie Usage
+
+The system stores last visit information in HTTP-only cookies:
+
+```php
+setcookie(
+    'ultima_visita_' . $user['rol'],           // Cookie name
+    date('Y-m-d H:i:s'),                       // Value: timestamp
+    time() + 365 * 24 * 3600,                  // Expires: 1 year
+    '/',                                        // Path
+    '',                                         // Domain
+    false,                                      // Secure (set to true for HTTPS)
+    true                                        // HttpOnly flag
+);
+```
+
+<Info>
+The `HttpOnly` flag prevents JavaScript access to cookies, mitigating XSS attacks.
+</Info>
+
+## Input Sanitization
+
+All user input is sanitized before storage or display:
+
+<CodeGroup>
+```php functions.php
+function sanitize_input($data)
+{
+    $data = trim($data);
+    $data = stripslashes($data);
+    $data = htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
+    return $data;
+}
+```
+</CodeGroup>
+
+Usage example from `viewAdmin.php:28`:
+
+```php
+$datos = [
+    'num_socio' => sanitize_input($_POST['num_socio']),
+    'dni'       => sanitize_input($_POST['dni']),
+    'email'     => sanitize_input($_POST['email']),
+    // ...
+];
+```
+
+## Logout Process
+
+The logout mechanism destroys the session and redirects to login:
+
+<CodeGroup>
+```php logout.php
+session_start();
+session_unset();
+session_destroy();
+header('Location: login.php');
+exit;
+```
+</CodeGroup>
+
+## Best Practices Implemented
+
+<AccordionGroup>
+<Accordion title="Password Security">
+- Uses `password_hash()` with bcrypt algorithm
+- Automatic salt generation per password
+- Timing-attack resistant verification with `password_verify()`
+- Passwords never stored in plain text
+</Accordion>
+
+<Accordion title="Session Security">
+- Session regeneration on login (prevents fixation)
+- Session regeneration on protected pages
+- Session data sanitized before storage
+- Proper session destruction on logout
+</Accordion>
+
+<Accordion title="SQL Injection Prevention">
+- All queries use PDO prepared statements
+- Parameters bound with type hints (PDO::PARAM_INT, etc.)
+- No string concatenation in queries
+- Error logging instead of displaying database errors
+</Accordion>
+
+<Accordion title="XSS Prevention">
+- All output sanitized with `htmlspecialchars()`
+- ENT_QUOTES flag prevents attribute injection
+- UTF-8 encoding specified
+- HttpOnly cookies prevent JavaScript access
+</Accordion>
+</AccordionGroup>
+
+## Test Credentials
+
+The system includes test accounts for development:
+
+<CardGroup cols={2}>
+<Card title="Admin Account" icon="user-shield">
+  **Email:** admin@hostel.com  
+  **Password:** admin123
+</Card>
+
+<Card title="User Account" icon="user">
+  **Email:** user1@mail.com  
+  **Password:** user123
+</Card>
+</CardGroup>
+
+<Warning>
+These test credentials should be removed or changed in production environments.
+</Warning>

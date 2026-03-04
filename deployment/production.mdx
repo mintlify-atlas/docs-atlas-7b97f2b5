@@ -1,0 +1,616 @@
+---
+title: "Production Deployment"
+description: "Deploy Refugio to a production environment with security and performance optimizations"
+---
+
+## Overview
+
+This guide covers the complete process of deploying Refugio to a production environment, including server setup, security hardening, SSL configuration, monitoring, and maintenance procedures.
+
+## Pre-Deployment Checklist
+
+<Steps>
+  <Step title="Security Review">
+    <Check>All default passwords changed</Check>
+    <Check>Database credentials secured</Check>
+    <Check>SSL certificate obtained</Check>
+    <Check>Firewall rules configured</Check>
+    <Check>File permissions set correctly</Check>
+    <Check>Debug mode disabled</Check>
+  </Step>
+  <Step title="Configuration Review">
+    <Check>Database connection tested</Check>
+    <Check>Email configuration verified (if applicable)</Check>
+    <Check>Timezone set correctly</Check>
+    <Check>Upload limits configured</Check>
+    <Check>Session security enabled</Check>
+  </Step>
+  <Step title="Testing">
+    <Check>All features tested in staging</Check>
+    <Check>Database migrations verified</Check>
+    <Check>Backup/restore tested</Check>
+    <Check>Load testing completed</Check>
+  </Step>
+</Steps>
+
+## Server Setup
+
+### 1. Provision Server
+
+Choose a hosting provider and provision a server meeting the [system requirements](/deployment/requirements).
+
+**Recommended Providers:**
+- DigitalOcean (Droplets)
+- AWS (EC2)
+- Linode
+- Vultr
+- Hetzner
+
+### 2. Initial Server Configuration
+
+<Steps>
+  <Step title="Update System">
+    ```bash
+    sudo apt update && sudo apt upgrade -y
+    ```
+  </Step>
+  <Step title="Create Application User">
+    ```bash
+    # Create refugio user
+    sudo useradd -m -s /bin/bash refugio
+    sudo usermod -aG www-data refugio
+    ```
+  </Step>
+  <Step title="Install Required Packages">
+    ```bash
+    # Install web server, PHP, and database
+    sudo apt install -y \
+      nginx \
+      php8.1-fpm \
+      php8.1-pdo \
+      php8.1-pgsql \
+      php8.1-mysql \
+      php8.1-mbstring \
+      php8.1-curl \
+      postgresql-14 \
+      certbot \
+      python3-certbot-nginx
+    ```
+  </Step>
+  <Step title="Configure Firewall">
+    ```bash
+    # Allow SSH, HTTP, HTTPS
+    sudo ufw allow OpenSSH
+    sudo ufw allow 'Nginx Full'
+    sudo ufw enable
+    
+    # Verify
+    sudo ufw status
+    ```
+  </Step>
+</Steps>
+
+## Application Deployment
+
+### Deploy Application Files
+
+<Tabs>
+  <Tab title="Git Deploy">
+    ```bash
+    # Clone repository
+    cd /var/www
+    sudo git clone https://github.com/IvBanzaga/Refugio.git refugio
+    
+    # Set ownership
+    sudo chown -R www-data:www-data /var/www/refugio
+    
+    # Set permissions
+    sudo find /var/www/refugio -type d -exec chmod 755 {} \;
+    sudo find /var/www/refugio -type f -exec chmod 644 {} \;
+    
+    # Make uploads writable
+    sudo chmod 775 /var/www/refugio/uploads
+    ```
+  </Tab>
+  <Tab title="Manual Upload">
+    ```bash
+    # Create directory
+    sudo mkdir -p /var/www/refugio
+    
+    # Upload files via SCP/SFTP
+    scp -r ./Refugio/* user@server:/var/www/refugio/
+    
+    # Set ownership
+    sudo chown -R www-data:www-data /var/www/refugio
+    
+    # Set permissions
+    sudo find /var/www/refugio -type d -exec chmod 755 {} \;
+    sudo find /var/www/refugio -type f -exec chmod 644 {} \;
+    ```
+  </Tab>
+</Tabs>
+
+### Configure Database
+
+Follow the [Database Setup guide](/deployment/database-setup) to:
+1. Install PostgreSQL or MySQL
+2. Create database and user
+3. Import schema
+4. Verify connection
+
+### Configure Application
+
+```bash
+# Copy and edit connection file
+cd /var/www/refugio
+sudo cp conexion.example.php conexion.php
+sudo nano conexion.php
+```
+
+Update with production credentials:
+
+```php
+<?php
+session_start();
+
+$host = 'localhost';
+$dbname = 'refugio';
+$user = 'refugio_user';
+$password = 'STRONG_PASSWORD_HERE';
+
+// ... rest of configuration
+?>
+```
+
+## SSL Certificate Setup
+
+### Using Let's Encrypt (Free)
+
+<Steps>
+  <Step title="Install Certbot">
+    ```bash
+    sudo apt install certbot python3-certbot-nginx
+    ```
+  </Step>
+  <Step title="Obtain Certificate">
+    ```bash
+    sudo certbot --nginx -d refugio.example.com
+    ```
+    
+    Follow the prompts and select option 2 to redirect HTTP to HTTPS.
+  </Step>
+  <Step title="Test Renewal">
+    ```bash
+    sudo certbot renew --dry-run
+    ```
+    
+    Certbot will automatically renew certificates before expiry.
+  </Step>
+</Steps>
+
+### Using Commercial Certificate
+
+<Steps>
+  <Step title="Generate CSR">
+    ```bash
+    sudo openssl req -new -newkey rsa:2048 -nodes \
+      -keyout /etc/ssl/private/refugio.key \
+      -out /etc/ssl/certs/refugio.csr
+    ```
+  </Step>
+  <Step title="Submit to CA">
+    Submit the CSR to your certificate authority and receive:
+    - Certificate file (.crt)
+    - Intermediate certificates (chain)
+  </Step>
+  <Step title="Install Certificate">
+    ```bash
+    # Copy certificate and chain
+    sudo cp refugio.crt /etc/ssl/certs/
+    sudo cp refugio-chain.crt /etc/ssl/certs/
+    
+    # Update Nginx config with paths
+    sudo nano /etc/nginx/sites-available/refugio
+    ```
+  </Step>
+</Steps>
+
+## Web Server Configuration
+
+### Nginx Setup
+
+Create the Nginx configuration:
+
+```bash
+sudo nano /etc/nginx/sites-available/refugio
+```
+
+Use the configuration from the [Configuration guide](/deployment/configuration#nginx-configuration).
+
+Enable the site:
+
+```bash
+# Create symlink
+sudo ln -s /etc/nginx/sites-available/refugio /etc/nginx/sites-enabled/
+
+# Test configuration
+sudo nginx -t
+
+# Reload Nginx
+sudo systemctl reload nginx
+```
+
+### PHP-FPM Optimization
+
+```bash
+sudo nano /etc/php/8.1/fpm/pool.d/refugio.conf
+```
+
+Optimize for production:
+
+```ini
+[refugio]
+user = www-data
+group = www-data
+listen = /run/php/php8.1-fpm-refugio.sock
+listen.owner = www-data
+listen.group = www-data
+
+pm = dynamic
+pm.max_children = 50
+pm.start_servers = 10
+pm.min_spare_servers = 5
+pm.max_spare_servers = 15
+pm.max_requests = 500
+
+; Production PHP settings
+php_admin_value[error_log] = /var/log/php-fpm/refugio-error.log
+php_admin_flag[log_errors] = on
+php_admin_flag[display_errors] = off
+php_admin_value[memory_limit] = 128M
+```
+
+Restart PHP-FPM:
+
+```bash
+sudo systemctl restart php8.1-fpm
+```
+
+## Security Hardening
+
+### 1. Disable PHP Error Display
+
+```bash
+sudo nano /etc/php/8.1/fpm/php.ini
+```
+
+```ini
+display_errors = Off
+log_errors = On
+error_log = /var/log/php/error.log
+```
+
+### 2. Secure File Permissions
+
+```bash
+# Remove write access from code files
+sudo find /var/www/refugio -type f -name "*.php" -exec chmod 644 {} \;
+
+# Only uploads directory is writable
+sudo chmod 775 /var/www/refugio/uploads
+
+# Protect sensitive files
+sudo chmod 600 /var/www/refugio/conexion.php
+```
+
+### 3. Implement Rate Limiting
+
+Add to Nginx configuration:
+
+```nginx
+# Define rate limit zone
+limit_req_zone $binary_remote_addr zone=login_limit:10m rate=5r/m;
+
+# Apply to login endpoint
+location = /login.php {
+    limit_req zone=login_limit burst=3 nodelay;
+    # ... rest of PHP config
+}
+```
+
+### 4. Configure Security Headers
+
+Add to Nginx server block:
+
+```nginx
+add_header X-Frame-Options "SAMEORIGIN" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-XSS-Protection "1; mode=block" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' cdn.jsdelivr.net; img-src 'self' data:; font-src 'self' cdn.jsdelivr.net;" always;
+```
+
+### 5. Database Security
+
+```bash
+# Restrict PostgreSQL to local connections
+sudo nano /etc/postgresql/14/main/pg_hba.conf
+```
+
+```conf
+# Only allow local connections
+host    refugio    refugio_user    127.0.0.1/32    md5
+```
+
+```bash
+# Restart PostgreSQL
+sudo systemctl restart postgresql
+```
+
+## Monitoring & Logging
+
+### 1. Application Logs
+
+```bash
+# Create log directory
+sudo mkdir -p /var/log/refugio
+sudo chown www-data:www-data /var/log/refugio
+```
+
+Monitor logs:
+
+```bash
+# Watch Nginx access log
+sudo tail -f /var/log/nginx/refugio-access.log
+
+# Watch Nginx error log
+sudo tail -f /var/log/nginx/refugio-error.log
+
+# Watch PHP errors
+sudo tail -f /var/log/php-fpm/refugio-error.log
+```
+
+### 2. Database Monitoring
+
+```bash
+# PostgreSQL active connections
+sudo -u postgres psql -c "SELECT count(*) FROM pg_stat_activity WHERE datname='refugio';"
+
+# MySQL connections
+mysql -u root -p -e "SHOW PROCESSLIST;"
+```
+
+### 3. Server Monitoring
+
+Install monitoring tools:
+
+```bash
+# Install htop and netdata
+sudo apt install htop
+
+# Install Netdata for real-time monitoring
+bash <(curl -Ss https://my-netdata.io/kickstart.sh)
+```
+
+### 4. Log Rotation
+
+Configure log rotation:
+
+```bash
+sudo nano /etc/logrotate.d/refugio
+```
+
+```conf
+/var/log/nginx/refugio-*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    create 0640 www-data adm
+    sharedscripts
+    postrotate
+        [ -f /var/run/nginx.pid ] && kill -USR1 `cat /var/run/nginx.pid`
+    endscript
+}
+```
+
+## Backup Strategy
+
+### Automated Database Backups
+
+```bash
+# Create backup script
+sudo nano /usr/local/bin/refugio-backup.sh
+```
+
+```bash
+#!/bin/bash
+BACKUP_DIR="/backups/refugio"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+# Create backup directory
+mkdir -p $BACKUP_DIR
+
+# Backup database
+pg_dump -U refugio_user refugio | gzip > $BACKUP_DIR/db_$DATE.sql.gz
+
+# Backup uploads
+tar -czf $BACKUP_DIR/uploads_$DATE.tar.gz /var/www/refugio/uploads
+
+# Keep only last 30 days
+find $BACKUP_DIR -type f -mtime +30 -delete
+
+echo "Backup completed: $DATE"
+```
+
+```bash
+# Make executable
+sudo chmod +x /usr/local/bin/refugio-backup.sh
+
+# Add to crontab
+sudo crontab -e
+```
+
+Add daily backup at 2 AM:
+
+```cron
+0 2 * * * /usr/local/bin/refugio-backup.sh >> /var/log/refugio-backup.log 2>&1
+```
+
+### Offsite Backup
+
+Sync backups to remote storage:
+
+```bash
+# Install rclone
+curl https://rclone.org/install.sh | sudo bash
+
+# Configure remote (S3, Dropbox, etc.)
+rclone config
+
+# Add to backup script
+rclone sync /backups/refugio remote:refugio-backups
+```
+
+## Performance Optimization
+
+### 1. Enable OPcache
+
+```bash
+sudo nano /etc/php/8.1/fpm/conf.d/10-opcache.ini
+```
+
+```ini
+opcache.enable=1
+opcache.memory_consumption=128
+opcache.interned_strings_buffer=8
+opcache.max_accelerated_files=4000
+opcache.revalidate_freq=60
+opcache.fast_shutdown=1
+```
+
+### 2. Nginx Caching
+
+Add to Nginx configuration:
+
+```nginx
+# Cache static files
+location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg)$ {
+    expires 30d;
+    add_header Cache-Control "public, immutable";
+}
+```
+
+### 3. Database Connection Pooling
+
+Use persistent connections in `conexion.php`:
+
+```php
+$conexionPDO = new PDO($dsn, $user, $password, [
+    PDO::ATTR_PERSISTENT => true,
+    // ... other options
+]);
+```
+
+## Maintenance Procedures
+
+### Regular Maintenance Tasks
+
+**Daily:**
+- Monitor error logs
+- Check disk space
+- Review failed login attempts
+
+**Weekly:**
+- Review backup integrity
+- Check SSL certificate expiry
+- Update system packages
+- Review access logs for anomalies
+
+**Monthly:**
+- Test backup restoration
+- Review and archive old logs
+- Update PHP and database
+- Security audit
+
+### Updates and Patches
+
+```bash
+# Update system packages
+sudo apt update && sudo apt upgrade -y
+
+# Update PHP
+sudo apt install php8.1
+
+# Restart services
+sudo systemctl restart php8.1-fpm nginx
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="500 Internal Server Error">
+    **Check:**
+    - PHP error logs: `sudo tail -f /var/log/php-fpm/refugio-error.log`
+    - Nginx error logs: `sudo tail -f /var/log/nginx/refugio-error.log`
+    - File permissions
+    - PHP-FPM status: `sudo systemctl status php8.1-fpm`
+  </Accordion>
+  <Accordion title="Database Connection Errors">
+    **Check:**
+    - Database service running
+    - Credentials in conexion.php
+    - Firewall rules
+    - pg_hba.conf (PostgreSQL) or user grants (MySQL)
+  </Accordion>
+  <Accordion title="SSL Certificate Errors">
+    **Check:**
+    - Certificate expiry: `sudo certbot certificates`
+    - Nginx SSL configuration
+    - Firewall allows port 443
+    - Certificate chain complete
+  </Accordion>
+  <Accordion title="High Server Load">
+    **Check:**
+    - PHP-FPM process limits
+    - Database connections
+    - Disk I/O
+    - Enable OPcache
+    - Check for slow queries
+  </Accordion>
+</AccordionGroup>
+
+## Production Checklist
+
+Before going live, verify:
+
+<Check>SSL certificate installed and working</Check>
+<Check>All default passwords changed</Check>
+<Check>Database backups configured and tested</Check>
+<Check>Error logs properly configured</Check>
+<Check>Firewall rules in place</Check>
+<Check>Monitoring tools installed</Check>
+<Check>File permissions secure</Check>
+<Check>PHP error display disabled</Check>
+<Check>Rate limiting enabled</Check>
+<Check>Security headers configured</Check>
+<Check>Documentation updated</Check>
+<Check>Test accounts removed or secured</Check>
+
+## Support Resources
+
+<CardGroup cols={2}>
+  <Card title="Security Guide" icon="shield" href="/guides/security">
+    Security best practices and hardening
+  </Card>
+  <Card title="Admin Guide" icon="user-shield" href="/guides/admin-guide">
+    Day-to-day administration tasks
+  </Card>
+  <Card title="GitHub Repository" icon="github" href="https://github.com/IvBanzaga/Refugio">
+    Source code and issue tracker
+  </Card>
+  <Card title="Configuration" icon="gear" href="/deployment/configuration">
+    Application configuration reference
+  </Card>
+</CardGroup>

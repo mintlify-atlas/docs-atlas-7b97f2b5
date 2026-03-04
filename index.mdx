@@ -1,97 +1,251 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Refugio Documentation"
+description: "Mountain refuge bed reservation management system for clubs and hostels"
+mode: "custom"
 ---
 
-## Setting up
+<div className="relative overflow-hidden bg-gradient-to-br from-[#0c64c4] via-[#0a52a0] to-[#084080] dark:from-[#0a4080] dark:via-[#083060] dark:to-[#062040]">
+  <div className="absolute inset-0 bg-[url('/patterns/topography.svg')] opacity-10"></div>
+  <div className="relative max-w-7xl mx-auto px-6 sm:px-8 py-20 sm:py-24 lg:py-28">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
+          Welcome to Refugio Documentation
+        </h1>
+        <p className="text-lg sm:text-xl text-white/90 max-w-2xl mb-8">
+          Learn how to deploy, configure, and use Refugio to manage bed reservations in mountain refuges and hostels with ease.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a
+            href="/quickstart"
+            className="inline-flex items-center px-6 py-3 rounded-full bg-white text-[#0c64c4] font-semibold hover:bg-white/90 transition-colors no-underline"
+          >
+            Get Started
+            <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </a>
+          <a
+            href="/installation"
+            className="inline-flex items-center px-6 py-3 rounded-full border-2 border-white/30 bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors no-underline"
+          >
+            Installation Guide
+          </a>
+        </div>
+      </div>
+      <div className="lg:col-span-5 hidden lg:flex items-center justify-center">
+        <div className="text-9xl">🏔️</div>
+      </div>
+    </div>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    Quick Start
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Get Refugio up and running in minutes with our step-by-step guide.
+  </p>
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+  <Steps>
+    <Step title="Set up your database">
+      Create a PostgreSQL or MySQL database and import the schema:
+      ```bash
+      psql -U postgres -d refugio -f sql/refugio.sql
+      ```
+    </Step>
+    <Step title="Configure your connection">
+      Edit the database connection settings in `conexion.php`:
+      ```php
+      $host = 'localhost';
+      $dbname = 'refugio';
+      $user = 'postgres';
+      $password = 'your_password';
+      ```
+    </Step>
+    <Step title="Start the server">
+      Launch the PHP development server:
+      ```bash
+      php -S localhost:8000
+      ```
+    </Step>
+    <Step title="Log in">
+      Access the application at `http://localhost:8000` and log in with the default admin credentials:
+      - Email: `admin@hostel.com`
+      - Password: `admin123`
+      
+      <Warning>Change these credentials immediately after first login.</Warning>
+    </Step>
+  </Steps>
+</div>
 
-## Make it yours
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    Core Features
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Explore the powerful features that make Refugio the ideal solution for managing mountain refuge reservations.
+  </p>
 
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
+  <CardGroup cols={2}>
     <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+      title="Secure Authentication"
+      icon="shield-halved"
+      href="/features/authentication"
+    >
+      Role-based access control with bcrypt password hashing and session management
+    </Card>
+    <Card
+      title="Reservation Management"
+      icon="calendar-check"
+      href="/features/reservations"
+    >
+      Complete booking workflow from request to approval with companion support
+    </Card>
+    <Card
+      title="User Management"
+      icon="users"
+      href="/features/user-management"
+    >
+      Full CRUD operations for managing club members and administrators
+    </Card>
+    <Card
+      title="Room & Bed Control"
+      icon="bed"
+      href="/features/room-management"
+    >
+      Track room occupancy and bed availability in real-time
+    </Card>
+    <Card
+      title="Interactive Calendar"
+      icon="calendar-days"
+      href="/features/calendar"
+    >
+      Visual availability calendar showing free and occupied beds by date
+    </Card>
+    <Card
+      title="Admin Dashboard"
+      icon="gauge-high"
+      href="/guides/admin-guide"
+    >
+      Statistics, metrics, and approval workflows for administrators
+    </Card>
+  </CardGroup>
+</div>
 
-## Create beautiful pages
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    User Guides
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Step-by-step guides for administrators and members.
+  </p>
 
-Everything you need to create world-class documentation.
+  <CardGroup cols={2}>
+    <Card
+      title="Administrator Guide"
+      icon="user-shield"
+      href="/guides/admin-guide"
+    >
+      Learn how to manage users, approve reservations, and configure the system
+    </Card>
+    <Card
+      title="Member Guide"
+      icon="user"
+      href="/guides/member-guide"
+    >
+      Discover how to check availability, make reservations, and manage companions
+    </Card>
+    <Card
+      title="Security Best Practices"
+      icon="lock"
+      href="/guides/security"
+    >
+      Implement security measures for production deployment
+    </Card>
+    <Card
+      title="Deployment Guide"
+      icon="server"
+      href="/deployment/production"
+    >
+      Deploy Refugio to production with confidence
+    </Card>
+  </CardGroup>
+</div>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <h2 className="text-3xl font-semibold text-gray-900 dark:text-white mb-4">
+    API Reference
+  </h2>
+  <p className="text-base text-gray-600 dark:text-gray-400 mb-8">
+    Explore the PHP functions and database schema that power Refugio.
+  </p>
 
-## Need inspiration?
+  <CardGroup cols={3}>
+    <Card
+      title="Authentication"
+      icon="key"
+      href="/api/authentication"
+    >
+      User authentication and session management functions
+    </Card>
+    <Card
+      title="Users"
+      icon="users-gear"
+      href="/api/users"
+    >
+      User CRUD operations and search functions
+    </Card>
+    <Card
+      title="Reservations"
+      icon="book"
+      href="/api/reservations"
+    >
+      Reservation creation, listing, and status management
+    </Card>
+    <Card
+      title="Rooms"
+      icon="door-open"
+      href="/api/rooms"
+    >
+      Room and bed availability functions
+    </Card>
+    <Card
+      title="Companions"
+      icon="user-group"
+      href="/api/companions"
+    >
+      Companion management for reservations
+    </Card>
+    <Card
+      title="Database Schema"
+      icon="database"
+      href="/api/database-schema"
+    >
+      Complete database structure and relationships
+    </Card>
+  </CardGroup>
+</div>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="bg-gradient-to-r from-[#0c64c4] to-[#084080] dark:from-[#0a4080] dark:to-[#062040] rounded-2xl p-8 sm:p-12 border border-[#84b4dc]/20">
+    <div className="max-w-3xl">
+      <h2 className="text-3xl font-bold text-white mb-4">
+        Ready to get started?
+      </h2>
+      <p className="text-lg text-white/90 mb-6">
+        Follow our quickstart guide to set up Refugio in your environment and start managing reservations today.
+      </p>
+      <a
+        href="/quickstart"
+        className="inline-flex items-center px-6 py-3 rounded-full bg-white text-[#0c64c4] font-semibold hover:bg-white/90 transition-colors no-underline"
+      >
+        Start Building
+        <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
+      </a>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,336 @@
+---
+title: Rooms and Beds
+description: Functions for managing rooms and bed availability in the refuge
+---
+
+## Overview
+
+Room and bed management functions handle room listings, bed availability checks, and bed assignment for the Refugio mountain refuge reservation system.
+
+## Room Functions
+
+### listar_habitaciones
+
+List all rooms with their capacity and bed availability.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Array of room objects with:
+  - `id` - Room ID
+  - `numero` - Room number
+  - `capacidad` - Room capacity
+  - `total_camas` - Total number of beds
+  - `camas_libres` - Number of available beds
+</ResponseField>
+
+#### SQL Query
+
+```sql
+SELECT h.id, h.numero, h.capacidad,
+       COUNT(c.id) as total_camas,
+       COUNT(CASE WHEN c.estado = 'libre' THEN 1 END) as camas_libres
+FROM habitaciones h
+LEFT JOIN camas c ON h.id = c.id_habitacion
+GROUP BY h.id, h.numero, h.capacidad
+ORDER BY h.numero
+```
+
+#### Code Example
+
+```php
+$habitaciones = listar_habitaciones($conexion);
+foreach ($habitaciones as $hab) {
+    echo "Habitación {$hab['numero']}: {$hab['camas_libres']} de {$hab['total_camas']} camas disponibles";
+}
+```
+
+---
+
+### obtener_todas_habitaciones
+
+Get all rooms with their total bed count.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Array of room objects ordered by room number
+</ResponseField>
+
+#### SQL Query
+
+```sql
+SELECT h.id, h.numero, h.capacidad, COUNT(c.id) as total_camas
+FROM habitaciones h
+LEFT JOIN camas c ON h.id = c.id_habitacion
+GROUP BY h.id, h.numero, h.capacidad
+ORDER BY h.numero
+```
+
+---
+
+## Bed Availability Functions
+
+### obtener_disponibilidad
+
+Get bed availability for a specific date range.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="fecha_inicio" type="string" required>
+  Start date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="fecha_fin" type="string" required>
+  End date (YYYY-MM-DD)
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Array of beds with availability status:
+  - `id` - Bed ID
+  - `numero` - Bed number
+  - `id_habitacion` - Room ID
+  - `habitacion_numero` - Room number
+  - `disponibilidad` - 'libre' or 'ocupada'
+</ResponseField>
+
+#### SQL Query
+
+```sql
+SELECT c.id, c.numero, c.id_habitacion, h.numero as habitacion_numero,
+       CASE
+           WHEN EXISTS (
+               SELECT 1
+               FROM reservas_camas rc
+               INNER JOIN reservas r ON rc.id_reserva = r.id
+               WHERE rc.id_cama = c.id
+               AND r.estado IN ('pendiente', 'reservada')
+               AND (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
+           ) THEN 'ocupada'
+           ELSE 'libre'
+       END as disponibilidad
+FROM camas c
+JOIN habitaciones h ON c.id_habitacion = h.id
+ORDER BY h.numero, c.numero
+```
+
+#### Code Example
+
+```php
+$disponibilidad = obtener_disponibilidad($conexion, '2024-06-15', '2024-06-17');
+foreach ($disponibilidad as $cama) {
+    echo "Habitación {$cama['habitacion_numero']}, Cama {$cama['numero']}: {$cama['disponibilidad']}";
+}
+```
+
+---
+
+### contar_camas_libres_por_fecha
+
+Count available beds for a specific date.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="fecha" type="string" required>
+  Date to check (YYYY-MM-DD)
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Number of available beds on the given date
+</ResponseField>
+
+#### SQL Query
+
+```sql
+SELECT COUNT(*) as libres
+FROM camas c
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM reservas_camas rc
+    INNER JOIN reservas r ON rc.id_reserva = r.id
+    WHERE rc.id_cama = c.id
+    AND r.estado IN ('pendiente', 'reservada')
+    AND :fecha BETWEEN r.fecha_inicio AND r.fecha_fin
+)
+```
+
+#### Code Example
+
+```php
+$camas_libres = contar_camas_libres_por_fecha($conexion, '2024-06-15');
+echo "Camas disponibles: {$camas_libres}";
+```
+
+---
+
+### contar_total_camas
+
+Count the total number of beds in the refuge.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Total number of beds
+</ResponseField>
+
+#### Code Example
+
+```php
+$total = contar_total_camas($conexion);
+echo "El refugio tiene {$total} camas en total";
+```
+
+---
+
+## Advanced Availability Functions
+
+### obtener_camas_disponibles
+
+Get available beds in a specific room for a date range, with optional reservation exclusion.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id_habitacion" type="int" required>
+  Room ID
+</ParamField>
+
+<ParamField path="fecha_inicio" type="string" required>
+  Start date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="fecha_fin" type="string" required>
+  End date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="id_reserva_excluir" type="int|null" default="null">
+  Reservation ID to exclude from availability check (used when editing reservations)
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Array of available beds with id and numero fields, ordered by bed number
+</ResponseField>
+
+#### SQL Query Structure
+
+```sql
+SELECT id, numero FROM camas
+WHERE id_habitacion = :id_habitacion
+AND id NOT IN (
+    SELECT DISTINCT c.id
+    FROM camas c
+    INNER JOIN reservas_camas rc ON c.id = rc.id_cama
+    INNER JOIN reservas r ON rc.id_reserva = r.id
+    WHERE c.id_habitacion = :id_habitacion
+    AND r.estado IN ('pendiente', 'reservada')
+    AND (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
+    AND r.id != :id_reserva_excluir  -- Optional exclusion
+)
+ORDER BY numero
+```
+
+#### Code Example
+
+```php
+// Get available beds in room 3 for new reservation
+$camas = obtener_camas_disponibles($conexion, 3, '2024-06-15', '2024-06-17');
+
+// Get available beds when editing reservation #42
+$camas = obtener_camas_disponibles($conexion, 3, '2024-06-15', '2024-06-17', 42);
+
+echo count($camas) . " camas disponibles";
+```
+
+---
+
+### obtener_habitaciones_disponibles
+
+Get rooms with available beds for a date range, excluding periods when the entire refuge is booked.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="fecha_inicio" type="string" required>
+  Start date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="fecha_fin" type="string" required>
+  End date (YYYY-MM-DD)
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Array of available rooms with:
+  - `id` - Room ID
+  - `numero` - Room number
+  - `capacidad` - Room capacity
+  - `camas_totales` - Total beds in room
+  - `camas_disponibles` - Available beds for the date range
+  Returns empty array if entire refuge is booked.
+</ResponseField>
+
+#### Special Logic
+
+1. First checks if the entire refuge is reserved (id_habitacion IS NULL)
+2. If so, returns empty array
+3. Otherwise, calculates available beds per room
+4. Only returns rooms with at least one available bed
+
+#### SQL Query
+
+```sql
+-- Check for full refuge reservation
+SELECT COUNT(*) as total
+FROM reservas
+WHERE id_habitacion IS NULL
+AND estado IN ('pendiente', 'reservada')
+AND (fecha_inicio <= :fecha_fin AND fecha_fin >= :fecha_inicio)
+
+-- If no full refuge reservation, get available rooms
+SELECT
+    h.id,
+    h.numero,
+    h.capacidad,
+    (SELECT COUNT(*) FROM camas WHERE id_habitacion = h.id) as camas_totales,
+    (SELECT COUNT(*) FROM camas WHERE id_habitacion = h.id) -
+    (SELECT COUNT(DISTINCT rc.id_cama)
+     FROM reservas_camas rc
+     INNER JOIN reservas r ON rc.id_reserva = r.id
+     INNER JOIN camas c ON rc.id_cama = c.id
+     WHERE c.id_habitacion = h.id
+     AND r.estado IN ('pendiente', 'reservada')
+     AND (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
+    ) as camas_disponibles
+FROM habitaciones h
+HAVING camas_disponibles > 0
+ORDER BY h.numero
+```
+
+#### Code Example
+
+```php
+$habitaciones = obtener_habitaciones_disponibles($conexion, '2024-06-15', '2024-06-17');
+
+if (empty($habitaciones)) {
+    echo "No hay habitaciones disponibles (refugio completo reservado)";
+} else {
+    foreach ($habitaciones as $hab) {
+        echo "Habitación {$hab['numero']}: {$hab['camas_disponibles']} camas disponibles";
+    }
+}
+```
+
+<Info>
+  This function is crucial for preventing overbooking when the entire refuge is reserved for special events.
+</Info>

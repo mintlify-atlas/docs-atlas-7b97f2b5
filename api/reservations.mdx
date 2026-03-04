@@ -1,0 +1,546 @@
+---
+title: Reservations
+description: Functions for managing bed reservations in the refuge
+---
+
+## Overview
+
+Reservation functions handle creating, updating, listing, and managing bed reservations for the Refugio mountain refuge system.
+
+## Listing Functions
+
+### listar_reservas
+
+List reservations with comprehensive filtering, pagination, sorting, and search capabilities.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="filtros" type="array" default="[]">
+  Filter options:
+  - `estado` (string) - Filter by status: 'pendiente', 'reservada', 'cancelada'
+  - `id_usuario` (int) - Filter by user ID
+  - `fecha_inicio` (string) - Filter by start date (greater than or equal)
+  - `fecha_fin` (string) - Filter by end date ( less than or equal)
+  - `search` (string) - Search in user name, email, or member number
+  - `order_by` (string) - Sort column: 'fecha_inicio', 'fecha_fin', 'fecha_creacion', 'nombre'
+  - `order_dir` (string) - Sort direction: 'ASC' or 'DESC'
+  - `limit` (int) - Results per page
+  - `offset` (int) - Starting position for pagination
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Array of reservation objects with user, room, and bed information
+</ResponseField>
+
+#### SQL Query Structure
+
+```sql
+SELECT r.id, r.fecha_inicio, r.fecha_fin, r.estado, r.fecha_creacion,
+       r.id_habitacion, r.numero_camas, r.observaciones,
+       u.nombre, u.apellido1, u.apellido2, u.num_socio, u.email,
+       h.numero as habitacion_numero,
+       GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas_numeros
+FROM reservas r
+LEFT JOIN usuarios u ON r.id_usuario = u.id
+LEFT JOIN habitaciones h ON r.id_habitacion = h.id
+LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
+LEFT JOIN camas c ON rc.id_cama = c.id
+WHERE 1=1
+  AND r.estado = :estado
+  AND (u.nombre LIKE :search OR u.apellido1 LIKE :search ...)
+GROUP BY r.id
+ORDER BY r.fecha_creacion DESC
+LIMIT 20 OFFSET 0
+```
+
+#### Code Example
+
+```php
+// Get pending reservations for a specific user
+$filtros = [
+    'estado' => 'pendiente',
+    'id_usuario' => 5,
+    'order_by' => 'fecha_inicio',
+    'order_dir' => 'ASC'
+];
+$reservas = listar_reservas($conexion, $filtros);
+
+// Get paginated search results
+$filtros = [
+    'search' => 'garcía',
+    'limit' => 20,
+    'offset' => 0,
+    'order_by' => 'fecha_creacion',
+    'order_dir' => 'DESC'
+];
+$reservas = listar_reservas($conexion, $filtros);
+```
+
+---
+
+### contar_reservas
+
+Count total reservations matching filter criteria.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="filtros" type="array" default="[]">
+  Same filter options as listar_reservas (estado, id_usuario, search)
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Total count of matching reservations
+</ResponseField>
+
+#### Code Example
+
+```php
+$filtros = ['estado' => 'pendiente', 'search' => 'garcía'];
+$total = contar_reservas($conexion, $filtros);
+$total_pages = ceil($total / 20);
+```
+
+---
+
+### obtener_reserva
+
+Get detailed information about a specific reservation, including companions.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id" type="int" required>
+  Reservation ID
+</ParamField>
+
+<ResponseField name="return" type="array|false">
+  Reservation object with user info, room details, bed numbers, and companions array. Returns false on error.
+</ResponseField>
+
+#### Code Example
+
+```php
+$reserva = obtener_reserva($conexion, 42);
+if ($reserva) {
+    echo "Reserva para: {$reserva['usuario_nombre']} {$reserva['usuario_apellido1']}";
+    echo "Habitación: {$reserva['habitacion_numero']}";
+    echo "Camas: {$reserva['camas_numeros']}";
+    echo "Acompañantes: " . count($reserva['acompanantes']);
+}
+```
+
+---
+
+## Creating Reservations
+
+### crear_reserva
+
+Create a new reservation with 'pendiente' status (for user-created reservations).
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="datos" type="array" required>
+  Reservation data:
+  - `id_usuario` (int) - User ID
+  - `id_habitacion` (int) - Room ID
+  - `numero_camas` (int) - Number of beds to reserve (minimum 1)
+  - `fecha_inicio` (string) - Start date (YYYY-MM-DD)
+  - `fecha_fin` (string) - End date (YYYY-MM-DD)
+</ParamField>
+
+<ResponseField name="return" type="int|false">
+  Returns the new reservation ID on success, false on failure
+</ResponseField>
+
+#### Process Flow
+
+1. Validates that at least 1 bed is requested
+2. Finds available beds in the specified room
+3. Checks if sufficient beds are available
+4. Creates reservation with 'pendiente' status
+5. Creates bed assignments in reservas_camas table
+6. Updates bed status to 'pendiente'
+
+#### Code Example
+
+```php
+try {
+    $datos = [
+        'id_usuario' => $_SESSION['user_id'],
+        'id_habitacion' => 3,
+        'numero_camas' => 2,
+        'fecha_inicio' => '2024-06-15',
+        'fecha_fin' => '2024-06-17'
+    ];
+    
+    $id_reserva = crear_reserva($conexion, $datos);
+    
+    if ($id_reserva) {
+        echo "Reserva creada con ID: {$id_reserva}";
+    }
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage();
+}
+```
+
+<Warning>
+  Throws Exception if insufficient beds are available: "No hay suficientes camas disponibles en esta habitación"
+</Warning>
+
+---
+
+### crear_reserva_para_socio
+
+Create a reservation for a member with automatic approval (admin function).
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="datos" type="array" required>
+  Same as crear_reserva
+</ParamField>
+
+<ResponseField name="return" type="int|false">
+  Returns the new reservation ID on success, false on failure
+</ResponseField>
+
+#### Key Differences
+
+- Uses transaction for data integrity
+- Sets status to 'reservada' (not 'pendiente')
+- Updates bed status to 'reservada' (not 'pendiente')
+- Intended for admin-created reservations
+
+#### Code Example
+
+```php
+try {
+    $conexion->beginTransaction();
+    
+    $datos = [
+        'id_usuario' => 5,
+        'id_habitacion' => 3,
+        'numero_camas' => 2,
+        'fecha_inicio' => '2024-06-15',
+        'fecha_fin' => '2024-06-17'
+    ];
+    
+    $id_reserva = crear_reserva_para_socio($conexion, $datos);
+    
+    if ($id_reserva) {
+        echo "Reserva aprobada con ID: {$id_reserva}";
+    } else {
+        $conexion->rollBack();
+    }
+} catch (Exception $e) {
+    $conexion->rollBack();
+    echo "Error: " . $e->getMessage();
+}
+```
+
+---
+
+### crear_reserva_especial_admin
+
+Create a special event reservation without a specific user (admin only).
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="datos" type="array" required>
+  Special reservation data:
+  - `id_habitacion` (int) - Room ID
+  - `numero_camas` (int) - Number of beds
+  - `fecha_inicio` (string) - Start date
+  - `fecha_fin` (string) - End date
+  - `motivo` (string) - Reason for special reservation
+</ParamField>
+
+<ResponseField name="return" type="int|false">
+  Returns reservation ID on success, false on failure
+</ResponseField>
+
+#### Code Example
+
+```php
+$datos = [
+    'id_habitacion' => 3,
+    'numero_camas' => 4,
+    'fecha_inicio' => '2024-07-01',
+    'fecha_fin' => '2024-07-03',
+    'motivo' => 'Mantenimiento programado'
+];
+
+$id_reserva = crear_reserva_especial_admin($conexion, $datos);
+```
+
+<Info>
+  The `motivo` field is stored in the `observaciones` column. The `id_usuario` is set to NULL for special reservations.
+</Info>
+
+---
+
+### crear_reserva_todo_refugio
+
+Reserve the entire refuge for a special event (all rooms, all beds).
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="datos" type="array" required>
+  Full refuge reservation data:
+  - `fecha_inicio` (string) - Start date
+  - `fecha_fin` (string) - End date  
+  - `motivo` (string) - Reason for full refuge reservation
+  - `numero_camas` - Ignored; calculated automatically
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True on success, false on failure
+</ResponseField>
+
+#### Special Behavior
+
+1. Counts total beds in the refuge
+2. Gets all available beds for the date range
+3. **Validates that ALL beds are available** - fails if even one bed is occupied
+4. Creates single reservation with `id_habitacion = NULL` (indicates full refuge)
+5. Assigns ALL beds to this reservation
+6. Prepends "TODO EL REFUGIO - " to the motivo
+
+#### Code Example
+
+```php
+try {
+    $conexion->beginTransaction();
+    
+    $datos = [
+        'fecha_inicio' => '2024-08-15',
+        'fecha_fin' => '2024-08-17',
+        'motivo' => 'Evento especial federación'
+    ];
+    
+    $resultado = crear_reserva_todo_refugio($conexion, $datos);
+    
+    if ($resultado) {
+        $conexion->commit();
+        echo "Todo el refugio reservado correctamente";
+    } else {
+        $conexion->rollBack();
+        echo "Error al reservar el refugio";
+    }
+} catch (Exception $e) {
+    $conexion->rollBack();
+    echo "Error: " . $e->getMessage();
+}
+```
+
+<Warning>
+  Will throw Exception if not all beds are available: "No se puede reservar TODO EL REFUGIO. Solo hay X de Y camas disponibles. Todas las camas deben estar libres."
+</Warning>
+
+---
+
+## Updating Reservations
+
+### actualizar_estado_reserva
+
+Update the status of a reservation and its associated beds.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id" type="int" required>
+  Reservation ID
+</ParamField>
+
+<ParamField path="estado" type="string" required>
+  New status: 'pendiente', 'reservada', or 'cancelada'
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True on success, false on failure
+</ResponseField>
+
+#### Status Mapping
+
+- `'reservada'` → Beds set to 'reservada'
+- `'pendiente'` → Beds set to 'pendiente'
+- `'cancelada'` → Beds set to 'libre'
+
+#### Code Example
+
+```php
+// Approve a pending reservation
+if (actualizar_estado_reserva($conexion, 42, 'reservada')) {
+    echo "Reserva aprobada";
+}
+
+// Cancel a reservation
+if (actualizar_estado_reserva($conexion, 42, 'cancelada')) {
+    echo "Reserva cancelada - camas liberadas";
+}
+```
+
+---
+
+### cancelar_reserva
+
+Cancel a reservation (wrapper function).
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id" type="int" required>
+  Reservation ID
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True on success, false on failure
+</ResponseField>
+
+#### Code Example
+
+```php
+if (cancelar_reserva($conexion, 42)) {
+    echo "Reserva cancelada correctamente";
+}
+```
+
+---
+
+### editar_reserva_usuario
+
+Edit a user's reservation (pendiente status only).
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id_reserva" type="int" required>
+  Reservation ID to edit
+</ParamField>
+
+<ParamField path="fecha_inicio" type="string" required>
+  New start date
+</ParamField>
+
+<ParamField path="fecha_fin" type="string" required>
+  New end date
+</ParamField>
+
+<ParamField path="id_habitacion" type="int" required>
+  New room ID
+</ParamField>
+
+<ParamField path="numero_camas" type="int" required>
+  New number of beds
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True on success, throws Exception on failure
+</ResponseField>
+
+#### Process
+
+1. Updates reservation basic data
+2. Deletes old bed assignments
+3. Gets available beds in new room/dates (excluding current reservation)
+4. Creates new bed assignments
+
+#### Code Example
+
+```php
+try {
+    editar_reserva_usuario(
+        $conexion,
+        42,              // reservation ID
+        '2024-06-20',    // new start date
+        '2024-06-22',    // new end date
+        5,               // new room
+        3                // new bed count
+    );
+    echo "Reserva actualizada";
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage();
+}
+```
+
+---
+
+### editar_reserva_admin
+
+Edit any reservation as admin (including full refuge reservations).
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id_reserva" type="int" required>
+  Reservation ID to edit
+</ParamField>
+
+<ParamField path="fecha_inicio" type="string" required>
+  New start date
+</ParamField>
+
+<ParamField path="fecha_fin" type="string" required>
+  New end date
+</ParamField>
+
+<ParamField path="id_habitacion" type="int" required>
+  New room ID (ignored for full refuge reservations)
+</ParamField>
+
+<ParamField path="numero_camas" type="int" required>
+  New number of beds (ignored for full refuge reservations)
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True on success, false on failure (uses transactions)
+</ResponseField>
+
+#### Special Logic
+
+- Detects if reservation is for entire refuge (`id_habitacion IS NULL`)
+- For full refuge: only updates dates
+- For regular reservations: updates all fields and reassigns beds
+
+#### Code Example
+
+```php
+try {
+    $conexion->beginTransaction();
+    
+    $resultado = editar_reserva_admin(
+        $conexion,
+        42,
+        '2024-07-01',
+        '2024-07-05',
+        3,
+        2
+    );
+    
+    if ($resultado) {
+        $conexion->commit();
+        echo "Reserva actualizada";
+    } else {
+        $conexion->rollBack();
+    }
+} catch (Exception $e) {
+    $conexion->rollBack();
+    echo "Error: " . $e->getMessage();
+}
+```

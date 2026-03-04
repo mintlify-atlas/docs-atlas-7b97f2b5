@@ -1,0 +1,632 @@
+---
+title: Database Connection
+description: Database connection setup and PDO configuration for the Refugio system
+---
+
+## Overview
+
+The Refugio system uses PDO (PHP Data Objects) for database connectivity, providing a secure and flexible interface for database operations. The system supports both PostgreSQL and MySQL databases.
+
+## Connection File Structure
+
+The database connection is established in the `conexion.php` file, which must be included at the beginning of every PHP script that requires database access.
+
+### File Location
+
+```
+Refugio/
+├── conexion.php       # Database connection file (required)
+├── functions.php      # Database functions using $conexionPDO
+├── login.php          # Requires conexion.php
+├── viewAdmin.php      # Requires conexion.php
+└── viewSocio.php      # Requires conexion.php
+```
+
+## Connection Setup
+
+The `conexion.php` file typically follows this structure:
+
+### Basic Structure
+
+```php
+<?php
+/**
+ * Database Connection Configuration
+ * 
+ * This file establishes the PDO connection to the database.
+ * It must be included in all files that need database access.
+ */
+
+// Start session for user authentication
+session_start();
+
+// Database configuration
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'refugio');
+define('DB_USER', 'your_username');
+define('DB_PASS', 'your_password');
+define('DB_PORT', '5432'); // 5432 for PostgreSQL, 3306 for MySQL
+
+try {
+    // Create PDO connection
+    $conexionPDO = new PDO(
+        "pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME,
+        DB_USER,
+        DB_PASS,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+            PDO::ATTR_PERSISTENT => false
+        ]
+    );
+} catch (PDOException $e) {
+    error_log("Database connection error: " . $e->getMessage());
+    die("Database connection failed. Please contact the administrator.");
+}
+?>
+```
+
+## PDO Configuration Options
+
+### Essential PDO Attributes
+
+The connection uses the following PDO attributes for security and performance:
+
+#### PDO::ATTR_ERRMODE
+
+```php
+PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+```
+
+**Purpose:** Enables exception throwing on database errors
+
+**Benefits:**
+- Proper error handling with try-catch blocks
+- Prevents silent failures
+- Allows for custom error logging
+
+**Example:**
+```php
+try {
+    $stmt = $conexionPDO->prepare("SELECT * FROM usuarios WHERE id = :id");
+    $stmt->execute(['id' => $userId]);
+} catch (PDOException $e) {
+    error_log("Query error: " . $e->getMessage());
+    // Handle error gracefully
+}
+```
+
+#### PDO::ATTR_DEFAULT_FETCH_MODE
+
+```php
+PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+```
+
+**Purpose:** Returns results as associative arrays
+
+**Benefits:**
+- Clean array access using column names
+- No numeric indexes
+- More readable code
+
+**Example:**
+```php
+$user = $stmt->fetch();
+echo $user['nombre'];  // Instead of $user[0]
+```
+
+#### PDO::ATTR_EMULATE_PREPARES
+
+```php
+PDO::ATTR_EMULATE_PREPARES => false
+```
+
+**Purpose:** Use native prepared statements
+
+**Benefits:**
+- Better SQL injection protection
+- Database-level query optimization
+- Type safety for parameters
+
+**Security Note:** This is critical for preventing SQL injection attacks.
+
+#### PDO::ATTR_PERSISTENT
+
+```php
+PDO::ATTR_PERSISTENT => false
+```
+
+**Purpose:** Disable persistent connections
+
+**Rationale:**
+- Better for shared hosting environments
+- Prevents connection pool exhaustion
+- More predictable behavior
+
+**Note:** Can be set to `true` for high-traffic sites with dedicated servers.
+
+## Database-Specific Configurations
+
+### PostgreSQL Connection
+
+```php
+<?php
+session_start();
+
+// PostgreSQL Configuration
+define('DB_HOST', 'localhost');
+define('DB_PORT', '5432');
+define('DB_NAME', 'refugio');
+define('DB_USER', 'postgres');
+define('DB_PASS', 'your_password');
+
+try {
+    $conexionPDO = new PDO(
+        "pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME,
+        DB_USER,
+        DB_PASS,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+            PDO::ATTR_PERSISTENT => false
+        ]
+    );
+    
+    // Set PostgreSQL-specific options
+    $conexionPDO->exec("SET NAMES 'UTF8'");
+    
+} catch (PDOException $e) {
+    error_log("PostgreSQL connection error: " . $e->getMessage());
+    die("Database connection failed.");
+}
+?>
+```
+
+**PostgreSQL Features:**
+- Native ENUM support
+- Better JSONB handling
+- Advanced indexing options
+- Full ACID compliance
+
+### MySQL Connection
+
+```php
+<?php
+session_start();
+
+// MySQL Configuration
+define('DB_HOST', 'localhost');
+define('DB_PORT', '3306');
+define('DB_NAME', 'refugio');
+define('DB_USER', 'root');
+define('DB_PASS', 'your_password');
+
+try {
+    $conexionPDO = new PDO(
+        "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+        DB_USER,
+        DB_PASS,
+        [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+            PDO::ATTR_PERSISTENT => false,
+            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
+        ]
+    );
+    
+} catch (PDOException $e) {
+    error_log("MySQL connection error: " . $e->getMessage());
+    die("Database connection failed.");
+}
+?>
+```
+
+**MySQL-Specific Options:**
+- `charset=utf8mb4` in DSN for emoji support
+- `PDO::MYSQL_ATTR_INIT_COMMAND` for proper collation
+- Uses VARCHAR with CHECK constraints instead of ENUM
+
+## Security Best Practices
+
+### 1. Prepared Statements
+
+Always use prepared statements with parameter binding:
+
+```php
+// ✅ CORRECT - Using prepared statements
+$stmt = $conexionPDO->prepare("SELECT * FROM usuarios WHERE email = :email");
+$stmt->bindParam(':email', $email);
+$stmt->execute();
+$user = $stmt->fetch();
+
+// ❌ WRONG - Direct string concatenation (SQL Injection risk!)
+$sql = "SELECT * FROM usuarios WHERE email = '" . $email . "'";
+$result = $conexionPDO->query($sql);
+```
+
+### 2. Parameter Binding Methods
+
+Two ways to bind parameters:
+
+**Named Parameters (Recommended):**
+```php
+$stmt = $conexionPDO->prepare("INSERT INTO usuarios (email, nombre) VALUES (:email, :nombre)");
+$stmt->bindParam(':email', $email);
+$stmt->bindParam(':nombre', $nombre);
+$stmt->execute();
+```
+
+**Positional Parameters:**
+```php
+$stmt = $conexionPDO->prepare("INSERT INTO usuarios (email, nombre) VALUES (?, ?)");
+$stmt->execute([$email, $nombre]);
+```
+
+### 3. Parameter Types
+
+Specify data types for better security:
+
+```php
+$stmt = $conexionPDO->prepare("SELECT * FROM usuarios WHERE id = :id");
+$stmt->bindParam(':id', $userId, PDO::PARAM_INT);
+$stmt->execute();
+```
+
+**Available Types:**
+- `PDO::PARAM_INT` - Integer values
+- `PDO::PARAM_STR` - String values (default)
+- `PDO::PARAM_BOOL` - Boolean values
+- `PDO::PARAM_NULL` - NULL values
+
+### 4. Error Handling
+
+Never expose database errors to users:
+
+```php
+try {
+    $stmt = $conexionPDO->prepare($sql);
+    $stmt->execute($params);
+} catch (PDOException $e) {
+    // Log the actual error
+    error_log("Database error: " . $e->getMessage());
+    
+    // Show generic message to user
+    die("An error occurred. Please try again later.");
+}
+```
+
+### 5. Configuration Security
+
+**Never commit conexion.php to version control!**
+
+Use environment variables or a separate config file:
+
+```php
+// config.example.php (safe to commit)
+<?php
+define('DB_HOST', 'localhost');
+define('DB_PORT', '5432');
+define('DB_NAME', 'refugio');
+define('DB_USER', 'your_username_here');
+define('DB_PASS', 'your_password_here');
+?>
+
+// .gitignore
+conexion.php
+config.php
+```
+
+## Usage Examples
+
+### Including the Connection
+
+Every PHP file that needs database access must include `conexion.php`:
+
+```php
+<?php
+require 'conexion.php';  // Establishes $conexionPDO
+require 'functions.php';  // Database functions
+
+// Now you can use $conexionPDO
+$usuarios = listar_usuarios($conexionPDO);
+?>
+```
+
+### Simple Query
+
+```php
+<?php
+require 'conexion.php';
+
+try {
+    $stmt = $conexionPDO->query("SELECT COUNT(*) as total FROM camas");
+    $result = $stmt->fetch();
+    echo "Total beds: " . $result['total'];
+} catch (PDOException $e) {
+    error_log($e->getMessage());
+}
+?>
+```
+
+### Prepared Statement with Parameters
+
+```php
+<?php
+require 'conexion.php';
+
+function obtener_usuario($conexion, $id) {
+    try {
+        $stmt = $conexion->prepare("SELECT * FROM usuarios WHERE id = :id");
+        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+        $stmt->execute();
+        return $stmt->fetch();
+    } catch (PDOException $e) {
+        error_log("Error: " . $e->getMessage());
+        return false;
+    }
+}
+
+$usuario = obtener_usuario($conexionPDO, 1);
+?>
+```
+
+### Insert with Transaction
+
+```php
+<?php
+require 'conexion.php';
+
+try {
+    $conexionPDO->beginTransaction();
+    
+    // Insert reservation
+    $stmt = $conexionPDO->prepare(
+        "INSERT INTO reservas (id_usuario, fecha_inicio, fecha_fin) 
+         VALUES (:id_usuario, :fecha_inicio, :fecha_fin)"
+    );
+    $stmt->execute([
+        ':id_usuario' => $userId,
+        ':fecha_inicio' => $fechaInicio,
+        ':fecha_fin' => $fechaFin
+    ]);
+    
+    $reservaId = $conexionPDO->lastInsertId();
+    
+    // Assign beds
+    $stmt = $conexionPDO->prepare(
+        "INSERT INTO reservas_camas (id_reserva, id_cama) VALUES (:id_reserva, :id_cama)"
+    );
+    
+    foreach ($camasIds as $camaId) {
+        $stmt->execute([
+            ':id_reserva' => $reservaId,
+            ':id_cama' => $camaId
+        ]);
+    }
+    
+    $conexionPDO->commit();
+    echo "Reservation created successfully!";
+    
+} catch (PDOException $e) {
+    $conexionPDO->rollBack();
+    error_log("Transaction failed: " . $e->getMessage());
+    echo "Error creating reservation.";
+}
+?>
+```
+
+### Fetch Multiple Rows
+
+```php
+<?php
+require 'conexion.php';
+
+function listar_habitaciones($conexion) {
+    try {
+        $stmt = $conexion->query(
+            "SELECT h.*, COUNT(c.id) as total_camas 
+             FROM habitaciones h 
+             LEFT JOIN camas c ON h.id = c.id_habitacion 
+             GROUP BY h.id 
+             ORDER BY h.numero"
+        );
+        return $stmt->fetchAll();
+    } catch (PDOException $e) {
+        error_log($e->getMessage());
+        return [];
+    }
+}
+
+$habitaciones = listar_habitaciones($conexionPDO);
+foreach ($habitaciones as $habitacion) {
+    echo $habitacion['numero'] . ": " . $habitacion['total_camas'] . " beds<br>";
+}
+?>
+```
+
+## Connection Verification
+
+The system includes a verification script `verificar_mysql.php` that checks:
+
+1. Database connectivity
+2. Database selection
+3. Table existence
+4. Sample data presence
+5. Password hashing
+6. User permissions
+
+**Running the verification:**
+
+```bash
+php verificar_mysql.php
+```
+
+**Example output:**
+```
+==============================================
+   VERIFICACIÓN DE CONFIGURACIÓN MYSQL
+==============================================
+
+✓ Conexión a MySQL establecida correctamente
+✓ Versión de MySQL: 8.0.35
+✓ Base de datos 'refugio' seleccionada correctamente
+✓ Tabla 'usuarios' existe
+✓ Tabla 'habitaciones' existe
+✓ Tabla 'camas' existe
+✓ Tabla 'reservas' existe
+✓ Tabla 'acompanantes' existe
+```
+
+## Troubleshooting
+
+### Connection Refused
+
+**Error:** `SQLSTATE[08006] [7] could not connect to server`
+
+**Solutions:**
+1. Check if database server is running
+2. Verify host and port in connection string
+3. Check firewall settings
+
+```bash
+# PostgreSQL
+sudo systemctl status postgresql
+sudo systemctl start postgresql
+
+# MySQL
+sudo systemctl status mysql
+sudo systemctl start mysql
+```
+
+### Authentication Failed
+
+**Error:** `SQLSTATE[28P01] authentication failed`
+
+**Solutions:**
+1. Verify username and password
+2. Check user permissions
+3. Ensure user has access to the database
+
+```sql
+-- PostgreSQL: Grant permissions
+GRANT ALL PRIVILEGES ON DATABASE refugio TO your_user;
+
+-- MySQL: Grant permissions
+GRANT ALL PRIVILEGES ON refugio.* TO 'your_user'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+### Database Not Found
+
+**Error:** `SQLSTATE[3D000] database "refugio" does not exist`
+
+**Solutions:**
+
+```sql
+-- PostgreSQL
+CREATE DATABASE refugio;
+
+-- MySQL
+CREATE DATABASE refugio CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+### UTF-8 Encoding Issues
+
+**Problem:** Special characters not displaying correctly
+
+**Solutions:**
+
+```php
+// PostgreSQL
+$conexionPDO->exec("SET NAMES 'UTF8'");
+
+// MySQL - Add to DSN
+"mysql:host=localhost;dbname=refugio;charset=utf8mb4"
+```
+
+## Environment-Specific Configurations
+
+### Development Environment
+
+```php
+<?php
+// Show errors for debugging
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'refugio_dev');
+define('DB_USER', 'dev_user');
+define('DB_PASS', 'dev_password');
+
+// ... PDO connection
+?>
+```
+
+### Production Environment
+
+```php
+<?php
+// Disable error display
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
+error_reporting(E_ALL);
+
+// Log errors instead
+ini_set('log_errors', 1);
+ini_set('error_log', '/var/log/php/refugio_errors.log');
+
+define('DB_HOST', 'db.production.com');
+define('DB_NAME', 'refugio');
+define('DB_USER', getenv('DB_USER'));
+define('DB_PASS', getenv('DB_PASS'));
+
+// ... PDO connection with persistent connections
+?>
+```
+
+## Performance Optimization
+
+### Connection Pooling (Production)
+
+```php
+// Enable persistent connections for high-traffic sites
+$options = [
+    PDO::ATTR_PERSISTENT => true,
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+];
+```
+
+### Query Optimization
+
+```php
+// Use LIMIT for pagination
+$stmt = $conexionPDO->prepare(
+    "SELECT * FROM reservas ORDER BY fecha_creacion DESC LIMIT :limit OFFSET :offset"
+);
+$stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+$stmt->execute();
+```
+
+### Prepared Statement Reuse
+
+```php
+// Prepare once, execute multiple times
+$stmt = $conexionPDO->prepare("INSERT INTO reservas_camas (id_reserva, id_cama) VALUES (?, ?)");
+
+foreach ($beds as $bedId) {
+    $stmt->execute([$reservationId, $bedId]);
+}
+```
+
+## Related Documentation
+
+- [Database Schema](/api/database-schema) - Complete schema documentation
+- [Functions Reference](/api/functions) - Database functions using PDO
+- [Security Guide](/guides/security) - Security best practices

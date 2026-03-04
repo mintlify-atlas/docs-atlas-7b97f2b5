@@ -1,0 +1,263 @@
+---
+title: "System Requirements"
+description: "Hardware and software requirements for running Refugio"
+---
+
+## Overview
+
+Refugio is a PHP-based web application that requires a standard LAMP/LEMP stack. This page outlines the minimum and recommended requirements for running the system in both development and production environments.
+
+## Minimum Requirements
+
+### Server Requirements
+
+<CardGroup cols={2}>
+  <Card title="PHP Version" icon="php">
+    **Minimum:** PHP 7.4  
+    **Recommended:** PHP 8.0 or higher
+  </Card>
+  <Card title="Web Server" icon="server">
+    Apache 2.4+ with mod_rewrite  
+    **or** Nginx 1.18+
+  </Card>
+  <Card title="Database" icon="database">
+    PostgreSQL 12+ **or** MySQL 5.7+ / MariaDB 10.3+
+  </Card>
+  <Card title="Memory" icon="memory">
+    **Minimum:** 512 MB RAM  
+    **Recommended:** 1 GB+ RAM
+  </Card>
+</CardGroup>
+
+### PHP Extensions
+
+The following PHP extensions are required:
+
+<Tabs>
+  <Tab title="Required Extensions">
+    ```bash
+    # Core extensions
+    php-pdo
+    php-pgsql    # For PostgreSQL
+    php-mysql    # For MySQL
+    php-mbstring
+    php-json
+    php-session
+    
+    # Security extensions
+    php-openssl
+    php-curl
+    ```
+  </Tab>
+  <Tab title="Check Installed">
+    ```bash
+    # Check PHP version
+    php -v
+    
+    # List all installed modules
+    php -m
+    
+    # Check specific module
+    php -m | grep pdo
+    php -m | grep pgsql
+    ```
+  </Tab>
+</Tabs>
+
+### Operating System
+
+<AccordionGroup>
+  <Accordion title="Linux (Recommended)">
+    - **Ubuntu:** 20.04 LTS or newer
+    - **Debian:** 10 (Buster) or newer
+    - **CentOS/RHEL:** 7 or 8
+    - **Amazon Linux:** 2
+  </Accordion>
+  <Accordion title="Windows">
+    - Windows Server 2016 or newer
+    - XAMPP 8.0+ or WAMP Server
+    - Not recommended for production
+  </Accordion>
+  <Accordion title="macOS">
+    - macOS 10.15 (Catalina) or newer
+    - Homebrew PHP installation
+    - Suitable for development only
+  </Accordion>
+</AccordionGroup>
+
+## Recommended Production Specifications
+
+### Small Deployment (1-50 users)
+
+| Resource | Specification |
+|----------|---------------|
+| **CPU** | 2 cores @ 2.0 GHz |
+| **RAM** | 2 GB |
+| **Storage** | 20 GB SSD |
+| **Bandwidth** | 100 Mbps |
+
+### Medium Deployment (50-200 users)
+
+| Resource | Specification |
+|----------|---------------|
+| **CPU** | 4 cores @ 2.5 GHz |
+| **RAM** | 4 GB |
+| **Storage** | 40 GB SSD |
+| **Bandwidth** | 500 Mbps |
+
+### Large Deployment (200+ users)
+
+| Resource | Specification |
+|----------|---------------|
+| **CPU** | 8+ cores @ 3.0 GHz |
+| **RAM** | 8+ GB |
+| **Storage** | 100+ GB SSD |
+| **Bandwidth** | 1 Gbps |
+
+## Database Requirements
+
+<Tabs>
+  <Tab title="PostgreSQL">
+    ### PostgreSQL Specifications
+    
+    **Version:** 12.0 or higher  
+    **Storage:** Minimum 5 GB for database  
+    **Extensions:** None required (uses standard SQL)
+    
+    **Recommended Settings:**
+    ```ini
+    max_connections = 100
+    shared_buffers = 256MB
+    effective_cache_size = 1GB
+    maintenance_work_mem = 64MB
+    checkpoint_completion_target = 0.9
+    wal_buffers = 16MB
+    default_statistics_target = 100
+    ```
+  </Tab>
+  <Tab title="MySQL/MariaDB">
+    ### MySQL/MariaDB Specifications
+    
+    **Version:** MySQL 5.7+ or MariaDB 10.3+  
+    **Storage:** Minimum 5 GB for database  
+    **Storage Engine:** InnoDB required
+    
+    **Recommended Settings:**
+    ```ini
+    max_connections = 100
+    innodb_buffer_pool_size = 256M
+    innodb_log_file_size = 64M
+    innodb_flush_log_at_trx_commit = 2
+    query_cache_size = 64M
+    tmp_table_size = 64M
+    max_heap_table_size = 64M
+    ```
+  </Tab>
+</Tabs>
+
+## Browser Support
+
+The Refugio web interface supports the following browsers:
+
+<Check>Modern browsers (last 2 versions)</Check>
+<Check>Chrome/Chromium 90+</Check>
+<Check>Firefox 88+</Check>
+<Check>Safari 14+</Check>
+<Check>Edge 90+</Check>
+<Check>Mobile browsers (iOS Safari, Chrome Mobile)</Check>
+
+<Warning>
+  Internet Explorer is **not supported**. Users must upgrade to a modern browser.
+</Warning>
+
+## Network Requirements
+
+### Ports
+
+| Port | Protocol | Purpose |
+|------|----------|----------|
+| 80 | HTTP | Web server (redirect to HTTPS) |
+| 443 | HTTPS | Secure web access |
+| 5432 | TCP | PostgreSQL (if remote) |
+| 3306 | TCP | MySQL (if remote) |
+| 22 | SSH | Server administration |
+
+### Firewall Rules
+
+```bash
+# Allow HTTP and HTTPS
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+# Allow SSH (with rate limiting)
+sudo ufw limit 22/tcp
+
+# Enable firewall
+sudo ufw enable
+```
+
+## SSL Certificate
+
+<Warning>
+  HTTPS is **required** for production deployments to protect user credentials and session data.
+</Warning>
+
+**Options:**
+- Let's Encrypt (free, automated)
+- Commercial SSL certificate
+- Cloudflare SSL (if using Cloudflare)
+
+## Development Environment
+
+For local development, simpler requirements apply:
+
+<Steps>
+  <Step title="Install PHP">
+    ```bash
+    # Ubuntu/Debian
+    sudo apt install php8.1 php8.1-pdo php8.1-pgsql
+    
+    # macOS (Homebrew)
+    brew install php@8.1
+    ```
+  </Step>
+  <Step title="Install Database">
+    ```bash
+    # PostgreSQL
+    sudo apt install postgresql postgresql-contrib
+    
+    # Or use Docker
+    docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=refugio postgres:14
+    ```
+  </Step>
+  <Step title="Start Dev Server">
+    ```bash
+    php -S localhost:8000
+    ```
+  </Step>
+</Steps>
+
+## Verification Script
+
+Use the included verification script to check your environment:
+
+```bash
+php verificar_mysql.php
+```
+
+This script checks:
+- PHP version and extensions
+- Database connectivity
+- File permissions
+- Session support
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Database Setup" icon="database" href="/deployment/database-setup">
+    Configure your database and import the schema
+  </Card>
+  <Card title="Configuration" icon="gear" href="/deployment/configuration">
+    Configure application settings
+  </Card>
+</CardGroup>

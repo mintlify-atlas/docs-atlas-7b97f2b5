@@ -1,0 +1,503 @@
+---
+title: 'Member Guide'
+description: 'Guide for club members using the Refugio reservation system'
+---
+
+# Member Guide
+
+This guide will help you navigate the Refugio reservation system to check availability, make reservations, and manage your bookings.
+
+## Getting Started
+
+### Logging In
+
+<Steps>
+  <Step title="Navigate to the login page">
+    Open `login.php` in your web browser
+  </Step>
+  
+  <Step title="Enter your credentials">
+    - **Email**: Your registered email address
+    - **Password**: Your password
+  </Step>
+  
+  <Step title="Access your dashboard">
+    Click "Acceder" to log in. You'll be redirected to your member dashboard (`viewSocio.php`)
+  </Step>
+</Steps>
+
+<Note>
+  If you don't have an account, contact the administrator to create one for you with your member details.
+</Note>
+
+### Your Dashboard
+
+After logging in, you'll see the main navigation menu:
+
+- **Calendario**: View bed availability calendar
+- **Nueva Reserva**: Create a new reservation
+- **Mis Reservas**: View and manage your reservations
+- **Mi Perfil**: Update your profile information
+
+## Checking Availability
+
+The calendar view helps you find available dates before making a reservation.
+
+### Understanding the Calendar
+
+Access the calendar by clicking **Calendario** in the sidebar.
+
+**Color coding**:
+
+<CardGroup cols={2}>
+  <Card title="Green" icon="check-circle">
+    Many beds available (5 or more free beds)
+  </Card>
+  <Card title="Yellow" icon="exclamation-triangle">
+    Few beds available (fewer than 5 free beds)
+  </Card>
+  <Card title="Red" icon="times-circle">
+    No beds available (fully booked)
+  </Card>
+  <Card title="Blue (solid)" icon="calendar-check">
+    You have an approved reservation on this day
+  </Card>
+  <Card title="Cyan (dashed border)" icon="clock">
+    You have a pending reservation on this day
+  </Card>
+  <Card title="Gray" icon="ban">
+    Past date (cannot book)
+  </Card>
+</CardGroup>
+
+### Reading Day Information
+
+Each calendar day displays:
+- **Day number** at the top
+- **Available beds** (e.g., "15/26 libres" means 15 beds available out of 26 total)
+- **Number of reservations** for that day
+- **Your reservation details** if you have one
+
+### Navigating Months
+
+Use the left and right arrow buttons in the calendar header to move between months:
+- **← (Anterior)**: View previous month
+- **→ (Siguiente)**: View next month
+
+The current month and year are displayed in the center.
+
+### Quick Reservation from Calendar
+
+Click any available day (green or yellow) to jump directly to the reservation form with that date pre-filled.
+
+## Making a Reservation
+
+Create a new reservation by clicking **Nueva Reserva** in the sidebar.
+
+### Step 1: Select Dates and Room
+
+<Steps>
+  <Step title="Choose check-in date">
+    Click the "Fecha de Entrada" field to open the date picker. Select your arrival date.
+    
+    <Note>
+      Dates marked in red are fully booked. You can still select them, but availability will be checked when you choose a room.
+    </Note>
+  </Step>
+  
+  <Step title="Choose check-out date">
+    Click the "Fecha de Salida" field and select your departure date. It must be after the check-in date.
+  </Step>
+  
+  <Step title="Select a room">
+    After choosing dates, the room dropdown will populate with available rooms showing:
+    - Room number
+    - Number of beds available in that room
+    
+    Example: "Habitación 1 (4 camas disponibles)"
+  </Step>
+  
+  <Step title="Choose number of beds">
+    Use the + and - buttons to select how many beds you need (minimum 1)
+  </Step>
+</Steps>
+
+<Warning>
+  You can only select as many beds as are available in your chosen room for your selected dates.
+</Warning>
+
+### Step 2: Describe Your Activity
+
+In the "Actividad a Realizar" section, describe what activity you'll be doing during your stay:
+
+**Examples**:
+- "Hiking to Pico de la Sierra"
+- "Mountain biking trails"
+- "Rock climbing"
+- "Photography expedition"
+
+This helps the refuge manage activities and group similar interests.
+
+### Step 3: Add Companions
+
+<Note>
+  If you're reserving more than 1 bed, you must add companion information for each additional bed.
+</Note>
+
+For example, if you reserve 3 beds, you need to add information for 2 companions (you are the first person).
+
+<Steps>
+  <Step title="Click 'Agregar Acompañante'">
+    The button appears when you select more than 1 bed
+  </Step>
+  
+  <Step title="Fill in companion details">
+    For each companion, enter:
+    - **Es socio**: Select "Sí" if they're a club member, "No" if not
+    - **Nº Socio**: Member number (only if they're a member)
+    - **DNI**: National ID number (required)
+    - **Nombre**: First name (required)
+    - **Apellido 1**: First surname (required)
+    - **Apellido 2**: Second surname (optional)
+  </Step>
+  
+  <Step title="Repeat for each companion">
+    Add one companion entry for each additional bed beyond the first
+  </Step>
+</Steps>
+
+<Warning>
+  You must add exactly the required number of companions. For example, 3 beds = 2 companions. The form will not submit if this doesn't match.
+</Warning>
+
+### Step 4: Add Comments (Optional)
+
+Use the "Comentarios" field to:
+- Request specific bed numbers or room locations
+- Mention dietary requirements
+- Note any special needs
+- Provide additional information for administrators
+
+### Step 5: Submit Your Reservation
+
+<Steps>
+  <Step title="Review your information">
+    Double-check all dates, room selection, companions, and details
+  </Step>
+  
+  <Step title="Click 'Crear Reserva'">
+    Submit your reservation request
+  </Step>
+  
+  <Step title="Wait for approval">
+    You'll see a success message: "Reserva creada exitosamente. Pendiente de aprobación por el administrador."
+    
+    Your reservation is now **pending** and awaits administrator approval.
+  </Step>
+</Steps>
+
+## Managing Your Reservations
+
+View and manage all your reservations by clicking **Mis Reservas** in the sidebar.
+
+### Reservation Status
+
+Your reservations are organized into three sections:
+
+<Tabs>
+  <Tab title="Pending">
+    **Pendientes de Aprobación** - Reservations awaiting administrator approval
+    
+    - Shows as cyan/dashed on calendar
+    - Can be edited or canceled
+    - Waiting for admin to approve or reject
+  </Tab>
+  
+  <Tab title="Approved">
+    **Reservas Aprobadas** - Confirmed reservations
+    
+    - Shows as blue on calendar
+    - Can be canceled (annulled)
+    - Can be edited if the check-in date hasn't passed
+    - These are your confirmed bookings
+  </Tab>
+  
+  <Tab title="Canceled">
+    **Reservas Canceladas** - Rejected or canceled reservations
+    
+    - Past reservations that were canceled
+    - Cannot be modified
+    - Kept for your records
+  </Tab>
+</Tabs>
+
+### Viewing Reservation Details
+
+Each reservation shows:
+- **Habitación**: Room number
+- **Nº Camas**: Number of beds reserved
+- **Fecha Entrada**: Check-in date (format: DD/MM/YYYY)
+- **Fecha Salida**: Check-out date (format: DD/MM/YYYY)
+- **Días**: Number of days (for approved reservations)
+- **Solicitado**: When you made the request
+
+### Editing a Pending Reservation
+
+You can modify reservations that are still pending approval:
+
+<Steps>
+  <Step title="Locate the reservation">
+    Find it in the "Pendientes de Aprobación" section
+  </Step>
+  
+  <Step title="Click 'Editar'">
+    Click the blue "Editar" button
+  </Step>
+  
+  <Step title="Make your changes">
+    Modify:
+    - Check-in date
+    - Check-out date
+    - Room selection
+    - Number of beds
+  </Step>
+  
+  <Step title="Save changes">
+    Submit the form to update your reservation
+  </Step>
+</Steps>
+
+<Note>
+  Editing a pending reservation keeps it in pending status. It will still need administrator approval.
+</Note>
+
+### Editing an Approved Reservation
+
+For approved reservations that haven't started yet:
+
+<Steps>
+  <Step title="Find the reservation">
+    Look in the "Reservas Aprobadas" section
+  </Step>
+  
+  <Step title="Check if editable">
+    The "Editar" button appears only if the check-in date is in the future
+  </Step>
+  
+  <Step title="Make changes">
+    Update dates, room, or number of beds as needed
+  </Step>
+  
+  <Step title="Submit">
+    Save your changes
+  </Step>
+</Steps>
+
+<Warning>
+  - You cannot edit reservations where the check-in date has passed
+  - Changes to approved reservations are subject to availability
+  - If beds aren't available, you'll see an error message
+</Warning>
+
+### Canceling a Pending Reservation
+
+<Steps>
+  <Step title="Locate the pending reservation">
+    Find it in the "Pendientes" section
+  </Step>
+  
+  <Step title="Click 'Cancelar'">
+    Click the red "Cancelar" button
+  </Step>
+  
+  <Step title="Confirm cancellation">
+    Confirm in the dialog that appears
+  </Step>
+</Steps>
+
+The reservation moves to "Canceladas" and beds are released.
+
+### Annulling an Approved Reservation
+
+<Steps>
+  <Step title="Find the approved reservation">
+    Locate it in "Reservas Aprobadas"
+  </Step>
+  
+  <Step title="Click 'Anular'">
+    Click the red "Anular" button
+  </Step>
+  
+  <Step title="Confirm">
+    A special confirmation dialog will appear warning you that this action cannot be undone
+  </Step>
+</Steps>
+
+<Warning>
+  Annulling an approved reservation is **permanent and cannot be undone**. If you change your mind, you'll need to create a new reservation.
+</Warning>
+
+## Managing Your Profile
+
+Update your contact information by clicking **Mi Perfil** in the sidebar.
+
+### Viewing Your Information
+
+Your profile displays:
+- Member number
+- Full name
+- DNI
+- Email address
+- Phone number
+- Profile photo (if uploaded)
+
+### Updating Contact Information
+
+You can update your:
+
+<Steps>
+  <Step title="Email address">
+    Enter your new email in the email field
+  </Step>
+  
+  <Step title="Phone number">
+    Update your phone number
+  </Step>
+  
+  <Step title="Save changes">
+    Click "Guardar Cambios" to update your profile
+  </Step>
+</Steps>
+
+<Note>
+  Your name, DNI, and member number cannot be changed by members. Contact an administrator if these need to be updated.
+</Note>
+
+### Uploading a Profile Photo
+
+<Steps>
+  <Step title="Click 'Cambiar Foto'">
+    In the profile section, click the upload button
+  </Step>
+  
+  <Step title="Select your photo">
+    Choose an image file:
+    - Formats: JPG, JPEG, PNG, or GIF
+    - Maximum size: 5 MB
+  </Step>
+  
+  <Step title="Upload">
+    The photo will be uploaded and displayed in your profile and sidebar
+  </Step>
+</Steps>
+
+### Changing Your Password
+
+To change your password:
+
+<Steps>
+  <Step title="Current password">
+    Enter your current password for verification
+  </Step>
+  
+  <Step title="New password">
+    Enter your new password (minimum 6 characters recommended)
+  </Step>
+  
+  <Step title="Confirm">
+    Re-enter your new password to confirm
+  </Step>
+  
+  <Step title="Save">
+    Click "Cambiar Contraseña"
+  </Step>
+</Steps>
+
+<Warning>
+  After changing your password, you'll need to use the new password for future logins.
+</Warning>
+
+## Tips for a Smooth Experience
+
+<Card title="Plan Ahead" icon="calendar">
+  - Check availability well in advance, especially for weekends and holidays
+  - Popular dates book quickly, so reserve early
+  - Consider alternative dates if your first choice is full
+</Card>
+
+<Card title="Accurate Information" icon="user-check">
+  - Provide accurate companion details to avoid delays in approval
+  - Include all necessary information in comments
+  - Double-check dates before submitting
+</Card>
+
+<Card title="Timely Cancellations" icon="clock">
+  - Cancel reservations you can't use as soon as possible
+  - This frees beds for other members
+  - Be courteous to fellow club members
+</Card>
+
+<Card title="Communication" icon="comment">
+  - Use the comments field to communicate special requests
+  - Contact the administrator if you have questions
+  - Keep your contact information up to date
+</Card>
+
+## Troubleshooting
+
+### Cannot find available beds
+
+**Problem**: All days show red or very few beds available
+
+**Solutions**:
+- Try different dates or time periods
+- Check if there's a special event reserving the entire refuge
+- Consider reserving fewer beds
+- Contact the administrator for assistance
+
+### Reservation not approved
+
+**Problem**: Your reservation stays pending for a long time
+
+**Possible reasons**:
+- Administrator hasn't reviewed it yet (check back daily)
+- There may be a conflict with another reservation
+- Your request might need clarification
+
+**Solution**: Contact the administrator if it's urgent or has been pending for several days.
+
+### Cannot edit or cancel reservation
+
+**Problem**: Edit or cancel buttons are disabled
+
+**Reasons**:
+- The check-in date has already passed (approved reservations)
+- The reservation is already canceled
+- You're looking at the wrong section
+
+**Solution**: Pending reservations can always be edited or canceled. For approved reservations, the check-in date must be in the future.
+
+### Form won't submit
+
+**Problem**: "Crear Reserva" button doesn't work
+
+**Common causes**:
+- Number of companions doesn't match beds (e.g., 3 beds needs 2 companions)
+- Required fields are empty
+- Check-in date is after check-out date
+- No room selected
+
+**Solution**: Review all fields and ensure companion count matches bed count minus one.
+
+## Getting Help
+
+If you encounter issues:
+
+1. **Check this guide** for solutions to common problems
+2. **Review the calendar** to understand availability
+3. **Contact the administrator** if you need assistance
+4. **Use the comments field** in reservations to communicate special needs
+
+<Note>
+  For security and password issues, see the [Security Best Practices](/guides/security) guide.
+</Note>

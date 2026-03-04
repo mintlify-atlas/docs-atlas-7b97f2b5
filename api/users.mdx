@@ -1,0 +1,434 @@
+---
+title: User Management
+description: User management functions for the Refugio system
+---
+
+## Overview
+
+User management functions handle CRUD operations for users, including listing, creating, updating, deleting, and exporting user data.
+
+## Core Functions
+
+### listar_usuarios
+
+Retrieve all users from the database.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Array of user objects, ordered by ID. Returns empty array on error.
+</ResponseField>
+
+#### SQL Query
+
+```sql
+SELECT id, num_socio, dni, telf, email, nombre, apellido1, apellido2, rol 
+FROM usuarios 
+ORDER BY id
+```
+
+---
+
+### obtener_usuario
+
+Get a specific user by their ID.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id" type="int" required>
+  User ID
+</ParamField>
+
+<ResponseField name="return" type="array|false">
+  User data array on success, false on failure
+</ResponseField>
+
+#### Code Example
+
+```php
+$user = obtener_usuario($conexion, 5);
+if ($user) {
+    echo $user['nombre'] . ' ' . $user['apellido1'];
+}
+```
+
+---
+
+### crear_usuario
+
+Create a new user account with hashed password.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="datos" type="array" required>
+  User data array containing:
+  - `num_socio` - Member number
+  - `dni` - National ID
+  - `telf` - Phone number
+  - `email` - Email address
+  - `nombre` - First name
+  - `apellido1` - First surname
+  - `apellido2` - Second surname
+  - `password` - Plain text password (will be hashed)
+  - `rol` - User role (admin/socio)
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True on success, false on failure
+</ResponseField>
+
+#### Code Example
+
+```php
+$datos = [
+    'num_socio' => '12345',
+    'dni' => '12345678A',
+    'telf' => '600123456',
+    'email' => 'nuevo@example.com',
+    'nombre' => 'Juan',
+    'apellido1' => 'García',
+    'apellido2' => 'López',
+    'password' => 'securePassword123',
+    'rol' => 'socio'
+];
+
+if (crear_usuario($conexion, $datos)) {
+    echo "Usuario creado exitosamente";
+}
+```
+
+#### Password Hashing
+
+```php
+$password_hash = password_hash($datos['password'], PASSWORD_BCRYPT);
+```
+
+---
+
+### actualizar_usuario
+
+Update an existing user's information.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id" type="int" required>
+  User ID to update
+</ParamField>
+
+<ParamField path="datos" type="array" required>
+  User data array (same fields as crear_usuario). Password is optional - if empty, it won't be updated.
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True on success, false on failure
+</ResponseField>
+
+#### Code Example
+
+```php
+// Update without changing password
+$datos = [
+    'num_socio' => '12345',
+    'dni' => '12345678A',
+    'telf' => '600999888',  // Updated phone
+    'email' => 'updated@example.com',  // Updated email
+    'nombre' => 'Juan',
+    'apellido1' => 'García',
+    'apellido2' => 'López',
+    'password' => '',  // Empty - won't update password
+    'rol' => 'socio'
+];
+
+actualizar_usuario($conexion, 5, $datos);
+```
+
+---
+
+### eliminar_usuario
+
+Delete a user from the system.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id" type="int" required>
+  User ID to delete
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True on success, false on failure
+</ResponseField>
+
+<Warning>
+  This operation is permanent and cannot be undone. Consider the impact on related reservations.
+</Warning>
+
+---
+
+## Advanced Functions
+
+### listar_usuarios_paginado
+
+List users with pagination, search, and sorting capabilities.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="filtros" type="array" default="[]">
+  Filter options:
+  - `page` (int) - Page number (default: 1)
+  - `limit` (int) - Items per page (default: 10)
+  - `search` (string) - Search term
+  - `order_by` (string) - Column to sort by (num_socio, nombre, email, dni, rol)
+  - `order_dir` (string) - Sort direction (ASC/DESC)
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Array of filtered and paginated users
+</ResponseField>
+
+#### Code Example
+
+```php
+$filtros = [
+    'page' => 1,
+    'limit' => 20,
+    'search' => 'garcía',
+    'order_by' => 'nombre',
+    'order_dir' => 'ASC'
+];
+
+$usuarios = listar_usuarios_paginado($conexion, $filtros);
+$total = contar_usuarios($conexion, ['search' => 'garcía']);
+```
+
+#### SQL Query Structure
+
+```sql
+SELECT id, num_socio, dni, telf, email, nombre, apellido1, apellido2, rol
+FROM usuarios
+WHERE 1=1
+  AND (nombre LIKE :search OR apellido1 LIKE :search OR ...)
+ORDER BY nombre ASC
+LIMIT 20 OFFSET 0
+```
+
+---
+
+### contar_usuarios
+
+Count total users matching the search criteria.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="filtros" type="array" default="[]">
+  Filter options:
+  - `search` (string) - Search term
+</ParamField>
+
+<ResponseField name="return" type="int">
+  Total number of users matching the criteria
+</ResponseField>
+
+---
+
+### export_usuarios_csv
+
+Export users to a CSV file with filtering and sorting.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="filtros" type="array" default="[]">
+  Filter options:
+  - `search` (string) - Search term
+  - `order_by` (string) - Column to sort by
+  - `order_dir` (string) - Sort direction (ASC/DESC)
+</ParamField>
+
+<ResponseField name="return" type="void">
+  Outputs CSV file directly to browser and exits. File format includes UTF-8 BOM and semicolon delimiters.
+</ResponseField>
+
+#### Code Example
+
+```php
+$filtros = [
+    'search' => '',
+    'order_by' => 'num_socio',
+    'order_dir' => 'ASC'
+];
+
+export_usuarios_csv($conexion, $filtros);
+// Script execution ends here
+```
+
+#### CSV Output Headers
+
+```php
+header('Content-Type: text/csv; charset=utf-8');
+header('Content-Disposition: attachment; filename="usuarios_' . date('Y-m-d_H-i-s') . '.csv"');
+```
+
+---
+
+## Profile Management
+
+### obtener_info_usuario
+
+Get complete user information including profile photo.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id_usuario" type="int" required>
+  User ID
+</ParamField>
+
+<ResponseField name="return" type="array|false">
+  User info array including foto_perfil field, or false on error
+</ResponseField>
+
+---
+
+### actualizar_perfil_usuario
+
+Update user's email and phone number.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id_usuario" type="int" required>
+  User ID
+</ParamField>
+
+<ParamField path="email" type="string" required>
+  New email address
+</ParamField>
+
+<ParamField path="telf" type="string" required>
+  New phone number
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Result array:
+  - `exito` (bool) - Success status
+  - `mensaje` (string) - Result message
+</ResponseField>
+
+#### Code Example
+
+```php
+$resultado = actualizar_perfil_usuario($conexion, 5, 'new@example.com', '666777888');
+if ($resultado['exito']) {
+    echo $resultado['mensaje'];
+}
+```
+
+---
+
+## Profile Photo Functions
+
+### subir_foto_perfil
+
+Upload and validate a user profile photo.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id_usuario" type="int" required>
+  User ID
+</ParamField>
+
+<ParamField path="file" type="array" required>
+  $_FILES array from file upload
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Result array:
+  - `exito` (bool) - Success status
+  - `mensaje` (string) - Result message
+  - `ruta` (string|null) - File path if successful
+</ResponseField>
+
+#### Validation Rules
+
+- Maximum size: 5MB
+- Allowed formats: JPEG, JPG, PNG, GIF
+- File must pass `getimagesize()` validation
+
+#### Code Example
+
+```php
+if (isset($_FILES['foto'])) {
+    $resultado = subir_foto_perfil($conexion, $_SESSION['user_id'], $_FILES['foto']);
+    if ($resultado['exito']) {
+        echo "Foto guardada en: " . $resultado['ruta'];
+    } else {
+        echo "Error: " . $resultado['mensaje'];
+    }
+}
+```
+
+---
+
+### obtener_foto_perfil
+
+Get the profile photo path for a user.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id_usuario" type="int" required>
+  User ID
+</ParamField>
+
+<ResponseField name="return" type="string|null">
+  Relative path to profile photo, or null if no photo exists
+</ResponseField>
+
+---
+
+### eliminar_foto_perfil
+
+Delete a user's profile photo.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id_usuario" type="int" required>
+  User ID
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Result array:
+  - `exito` (bool) - Success status
+  - `mensaje` (string) - Result message
+</ResponseField>
+
+#### Code Example
+
+```php
+$resultado = eliminar_foto_perfil($conexion, 5);
+if ($resultado['exito']) {
+    echo "Foto eliminada correctamente";
+}
+```

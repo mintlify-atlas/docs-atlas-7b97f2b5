@@ -1,0 +1,521 @@
+---
+title: "Application Configuration"
+description: "Configure Refugio application settings and connections"
+---
+
+## Overview
+
+This guide covers the configuration of Refugio, including database connections, file permissions, web server settings, and environment-specific configurations.
+
+## Database Connection
+
+### Connection File (conexion.php)
+
+The database connection is configured in `conexion.php`. This file uses PDO (PHP Data Objects) for secure database access.
+
+<Tabs>
+  <Tab title="PostgreSQL">
+    ```php
+    <?php
+    session_start();
+    
+    // PostgreSQL configuration
+    $host = 'localhost';
+    $port = '5432';
+    $dbname = 'refugio';
+    $user = 'refugio_user';
+    $password = 'your_secure_password';
+    
+    try {
+        $dsn = "pgsql:host=$host;port=$port;dbname=$dbname";
+        $conexionPDO = new PDO($dsn, $user, $password, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+            PDO::ATTR_PERSISTENT => false
+        ]);
+    } catch (PDOException $e) {
+        error_log('Database connection error: ' . $e->getMessage());
+        die('Unable to connect to the database');
+    }
+    ?>
+    ```
+  </Tab>
+  <Tab title="MySQL">
+    ```php
+    <?php
+    session_start();
+    
+    // MySQL configuration
+    $host = 'localhost';
+    $port = '3306';
+    $dbname = 'refugio';
+    $user = 'refugio_user';
+    $password = 'your_secure_password';
+    $charset = 'utf8mb4';
+    
+    try {
+        $dsn = "mysql:host=$host;port=$port;dbname=$dbname;charset=$charset";
+        $conexionPDO = new PDO($dsn, $user, $password, [
+            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES => false,
+            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci"
+        ]);
+    } catch (PDOException $e) {
+        error_log('Database connection error: ' . $e->getMessage());
+        die('Unable to connect to the database');
+    }
+    ?>
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  Never commit `conexion.php` with real credentials to version control. Use environment variables or separate config files.
+</Warning>
+
+### Environment-Specific Configuration
+
+Create separate configuration files for different environments:
+
+<Steps>
+  <Step title="Create config directory">
+    ```bash
+    mkdir config
+    ```
+  </Step>
+  <Step title="Create environment files">
+    ```bash
+    touch config/database.dev.php
+    touch config/database.prod.php
+    ```
+  </Step>
+  <Step title="Use in conexion.php">
+    ```php
+    <?php
+    // Load environment-specific config
+    $env = getenv('APP_ENV') ?: 'dev';
+    require_once __DIR__ . "/config/database.{$env}.php";
+    
+    // Use loaded config
+    $conexionPDO = new PDO($dsn, $user, $password, $options);
+    ?>
+    ```
+  </Step>
+</Steps>
+
+## PHP Configuration
+
+### php.ini Settings
+
+Optimize PHP settings for production:
+
+```ini
+; Error handling
+display_errors = Off
+log_errors = On
+error_log = /var/log/php/error.log
+error_reporting = E_ALL & ~E_DEPRECATED & ~E_STRICT
+
+; Security
+expose_php = Off
+allow_url_fopen = Off
+allow_url_include = Off
+disable_functions = exec,passthru,shell_exec,system,proc_open,popen
+
+; Session security
+session.cookie_httponly = 1
+session.cookie_secure = 1
+session.use_strict_mode = 1
+session.cookie_samesite = "Strict"
+
+; Upload limits
+upload_max_filesize = 5M
+post_max_size = 6M
+max_file_uploads = 5
+
+; Performance
+max_execution_time = 30
+memory_limit = 128M
+
+; OPcache (recommended)
+opcache.enable = 1
+opcache.memory_consumption = 128
+opcache.interned_strings_buffer = 8
+opcache.max_accelerated_files = 4000
+opcache.revalidate_freq = 60
+```
+
+### PHP-FPM Configuration
+
+For production deployments using Nginx + PHP-FPM:
+
+```ini
+; /etc/php/8.1/fpm/pool.d/refugio.conf
+[refugio]
+user = www-data
+group = www-data
+listen = /run/php/php8.1-fpm-refugio.sock
+listen.owner = www-data
+listen.group = www-data
+pm = dynamic
+pm.max_children = 20
+pm.start_servers = 5
+pm.min_spare_servers = 5
+pm.max_spare_servers = 10
+pm.process_idle_timeout = 10s
+pm.max_requests = 500
+```
+
+## File Permissions
+
+### Directory Structure
+
+Set appropriate permissions for security:
+
+```bash
+# Set ownership to web server user
+sudo chown -R www-data:www-data /var/www/refugio
+
+# Set directory permissions
+sudo find /var/www/refugio -type d -exec chmod 755 {} \;
+
+# Set file permissions
+sudo find /var/www/refugio -type f -exec chmod 644 {} \;
+
+# Make uploads directory writable
+sudo chmod 775 /var/www/refugio/uploads
+sudo chown www-data:www-data /var/www/refugio/uploads
+```
+
+### Upload Directory
+
+The `uploads/` directory stores user profile photos:
+
+```bash
+# Create uploads directory
+mkdir -p uploads/usuarios
+
+# Set permissions
+chmod 775 uploads
+chmod 775 uploads/usuarios
+
+# Set ownership
+chown www-data:www-data uploads
+chown www-data:www-data uploads/usuarios
+```
+
+<Warning>
+  The uploads directory must be writable by the web server, but **never** set permissions to 777.
+</Warning>
+
+## Web Server Configuration
+
+### Apache Configuration
+
+#### Virtual Host
+
+```apache
+<VirtualHost *:80>
+    ServerName refugio.example.com
+    ServerAdmin admin@example.com
+    DocumentRoot /var/www/refugio
+    
+    # Redirect to HTTPS
+    RewriteEngine On
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName refugio.example.com
+    ServerAdmin admin@example.com
+    DocumentRoot /var/www/refugio
+    
+    # SSL Configuration
+    SSLEngine on
+    SSLCertificateFile /etc/ssl/certs/refugio.crt
+    SSLCertificateKeyFile /etc/ssl/private/refugio.key
+    SSLCertificateChainFile /etc/ssl/certs/refugio-chain.crt
+    
+    # Security Headers
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    
+    # Directory Settings
+    <Directory /var/www/refugio>
+        Options -Indexes +FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+    
+    # Protect sensitive files
+    <FilesMatch "^(conexion\.php|functions\.php|config\.php)$">
+        Require all denied
+    </FilesMatch>
+    
+    # Log files
+    ErrorLog ${APACHE_LOG_DIR}/refugio-error.log
+    CustomLog ${APACHE_LOG_DIR}/refugio-access.log combined
+</VirtualHost>
+```
+
+#### .htaccess File
+
+The included `.htaccess` provides security and rewrite rules:
+
+```apache
+# Disable directory listing
+Options -Indexes
+
+# Enable rewrite engine
+RewriteEngine On
+
+# Redirect to HTTPS
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Protect sensitive files
+<FilesMatch "(conexion\.php|functions\.php|\.sql|\.env)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Prevent access to hidden files
+RedirectMatch 403 /\..*$
+
+# Set security headers
+<IfModule mod_headers.c>
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-XSS-Protection "1; mode=block"
+</IfModule>
+```
+
+### Nginx Configuration
+
+```nginx
+server {
+    listen 80;
+    server_name refugio.example.com;
+    
+    # Redirect to HTTPS
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name refugio.example.com;
+    root /var/www/refugio;
+    index index.php login.php;
+    
+    # SSL Configuration
+    ssl_certificate /etc/ssl/certs/refugio.crt;
+    ssl_certificate_key /etc/ssl/private/refugio.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    
+    # Security Headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    
+    # Logging
+    access_log /var/log/nginx/refugio-access.log;
+    error_log /var/log/nginx/refugio-error.log;
+    
+    # PHP handling
+    location ~ \.php$ {
+        fastcgi_pass unix:/run/php/php8.1-fpm-refugio.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+    
+    # Protect sensitive files
+    location ~ /(conexion|functions|config)\.php$ {
+        deny all;
+    }
+    
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+    
+    # Static files caching
+    location ~* \.(jpg|jpeg|png|gif|ico|css|js|svg)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    # Deny access to SQL files
+    location ~* \.(sql|env)$ {
+        deny all;
+    }
+}
+```
+
+## Application Settings
+
+### Session Configuration
+
+Refugio uses PHP sessions for authentication. Configure in `conexion.php`:
+
+```php
+<?php
+// Session configuration
+ini_set('session.cookie_httponly', 1);
+ini_set('session.use_only_cookies', 1);
+ini_set('session.cookie_secure', 1); // Requires HTTPS
+ini_set('session.cookie_samesite', 'Strict');
+
+session_start();
+?>
+```
+
+### Upload Configuration
+
+Profile photo upload settings in `subir_foto.php`:
+
+```php
+<?php
+// Upload configuration
+$max_size = 5 * 1024 * 1024; // 5MB
+$allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+$upload_dir = __DIR__ . '/uploads/usuarios/';
+?>
+```
+
+### Timezone Configuration
+
+Set the application timezone:
+
+```php
+<?php
+// Set timezone (add to conexion.php)
+date_default_timezone_set('Atlantic/Canary');
+// Or for other regions:
+// date_default_timezone_set('Europe/Madrid');
+// date_default_timezone_set('UTC');
+?>
+```
+
+## Environment Variables
+
+For better security, use environment variables:
+
+### Using .env File
+
+```bash
+# .env file
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=refugio
+DB_USER=refugio_user
+DB_PASSWORD=your_secure_password
+APP_ENV=production
+APP_DEBUG=false
+```
+
+### Load in conexion.php
+
+```php
+<?php
+// Load environment variables
+function loadEnv($file) {
+    if (!file_exists($file)) {
+        return;
+    }
+    $lines = file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        if (strpos(trim($line), '#') === 0) continue;
+        list($key, $value) = explode('=', $line, 2);
+        putenv(trim($key) . '=' . trim($value));
+    }
+}
+
+loadEnv(__DIR__ . '/.env');
+
+// Use environment variables
+$host = getenv('DB_HOST');
+$dbname = getenv('DB_NAME');
+$user = getenv('DB_USER');
+$password = getenv('DB_PASSWORD');
+?>
+```
+
+<Warning>
+  Never commit `.env` files to version control. Add to `.gitignore`.
+</Warning>
+
+## Verify Configuration
+
+### Test Database Connection
+
+Use the included verification script:
+
+```bash
+php verificar_mysql.php
+```
+
+### Check PHP Configuration
+
+```bash
+# View PHP configuration
+php -i | grep -i "configuration file"
+
+# Check specific settings
+php -r "echo ini_get('upload_max_filesize');"
+php -r "echo ini_get('session.cookie_secure');"
+```
+
+### Test File Permissions
+
+```bash
+# Test write access
+touch uploads/test.txt
+rm uploads/test.txt
+
+# Check ownership
+ls -la uploads/
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Database Connection Fails">
+    - Verify credentials in `conexion.php`
+    - Check database service is running
+    - Ensure firewall allows connections
+    - Review PHP error logs
+    - Test connection with command line client
+  </Accordion>
+  <Accordion title="Upload Fails">
+    - Check directory permissions (775)
+    - Verify ownership (www-data)
+    - Check PHP upload limits
+    - Review file size restrictions
+    - Check disk space
+  </Accordion>
+  <Accordion title="Session Not Working">
+    - Verify session.cookie_secure is 0 for HTTP or 1 for HTTPS
+    - Check session directory permissions
+    - Clear browser cookies
+    - Review session settings in php.ini
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Production Deployment" icon="rocket" href="/deployment/production">
+    Deploy Refugio to production
+  </Card>
+  <Card title="Security Guide" icon="shield" href="/guides/security">
+    Implement security best practices
+  </Card>
+</CardGroup>

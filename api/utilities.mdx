@@ -1,0 +1,385 @@
+---
+title: Utilities
+description: Helper and utility functions for the Refugio system
+---
+
+## Overview
+
+Utility functions provide common helper functionality for data validation, formatting, and image handling across the Refugio system.
+
+## Data Sanitization
+
+### sanitize_input
+
+Sanitize user input to prevent XSS attacks.
+
+<ParamField path="data" type="string" required>
+  Raw input data to sanitize
+</ParamField>
+
+<ResponseField name="return" type="string">
+  Sanitized string safe for output
+</ResponseField>
+
+#### Process
+
+1. Removes leading/trailing whitespace with `trim()`
+2. Removes backslashes with `stripslashes()`
+3. Converts special characters to HTML entities with `htmlspecialchars()`
+
+#### Code Example
+
+```php
+$nombre = sanitize_input($_POST['nombre']);
+$email = sanitize_input($_POST['email']);
+$observaciones = sanitize_input($_POST['observaciones']);
+
+echo "Nombre limpio: {$nombre}";
+```
+
+#### Implementation
+
+```php
+function sanitize_input($data)
+{
+    $data = trim($data);
+    $data = stripslashes($data);
+    $data = htmlspecialchars($data, ENT_QUOTES, 'UTF-8');
+    return $data;
+}
+```
+
+<Info>
+  Always sanitize user input before displaying it in HTML to prevent XSS vulnerabilities.
+</Info>
+
+---
+
+## Date Utilities
+
+### formatear_fecha
+
+Format a date from YYYY-MM-DD to DD/MM/YYYY for display.
+
+<ParamField path="fecha" type="string" required>
+  Date string in YYYY-MM-DD format
+</ParamField>
+
+<ResponseField name="return" type="string">
+  Formatted date in DD/MM/YYYY format
+</ResponseField>
+
+#### Code Example
+
+```php
+$fecha_db = '2024-06-15';
+$fecha_mostrar = formatear_fecha($fecha_db);
+echo $fecha_mostrar;  // Output: 15/06/2024
+```
+
+#### Implementation
+
+```php
+function formatear_fecha($fecha)
+{
+    $timestamp = strtotime($fecha);
+    return date('d/m/Y', $timestamp);
+}
+```
+
+---
+
+### fecha_en_rango
+
+Check if a date falls within a specific date range.
+
+<ParamField path="fecha" type="string" required>
+  Date to check (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="inicio" type="string" required>
+  Range start date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="fin" type="string" required>
+  Range end date (YYYY-MM-DD)
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True if date is within range (inclusive), false otherwise
+</ResponseField>
+
+#### Code Example
+
+```php
+$fecha = '2024-06-16';
+$inicio = '2024-06-15';
+$fin = '2024-06-17';
+
+if (fecha_en_rango($fecha, $inicio, $fin)) {
+    echo "La fecha está en el rango";
+}
+
+// Check if a specific date overlaps with a reservation
+$reserva = obtener_reserva($conexion, 42);
+if (fecha_en_rango('2024-06-16', $reserva['fecha_inicio'], $reserva['fecha_fin'])) {
+    echo "La habitación está ocupada ese día";
+}
+```
+
+---
+
+## Image Validation
+
+### validar_imagen
+
+Validate an uploaded image file for security and format compliance.
+
+<ParamField path="file" type="array" required>
+  File array from $_FILES superglobal
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Validation result:
+  - `valido` (bool) - Whether file is valid
+  - `mensaje` (string) - Validation message
+  - `extension` (string) - File extension (only if valid)
+</ResponseField>
+
+#### Validation Rules
+
+- **Maximum size**: 5MB (5,242,880 bytes)
+- **Allowed MIME types**: image/jpeg, image/jpg, image/png, image/gif
+- **Allowed extensions**: jpg, jpeg, png, gif
+- **Image verification**: Must pass `getimagesize()` check
+
+#### Code Example
+
+```php
+if (isset($_FILES['imagen'])) {
+    $validacion = validar_imagen($_FILES['imagen']);
+    
+    if ($validacion['valido']) {
+        echo "Imagen válida: " . $validacion['extension'];
+        // Proceed with upload
+    } else {
+        echo "Error: " . $validacion['mensaje'];
+    }
+}
+```
+
+#### Validation Messages
+
+| Condition | Message |
+|-----------|----------|
+| Upload error | "Error al subir el archivo" |
+| File too large | "El archivo es demasiado grande (máximo 5MB)" |
+| Invalid MIME type | "Formato no permitido. Solo JPG, PNG o GIF" |
+| Invalid extension | "Extensión no permitida" |
+| Not a real image | "El archivo no es una imagen válida" |
+| Valid | "Imagen válida" |
+
+---
+
+## Profile Photo Management
+
+### subir_foto_perfil
+
+Upload and save a user's profile photo.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id_usuario" type="int" required>
+  User ID
+</ParamField>
+
+<ParamField path="file" type="array" required>
+  File array from $_FILES
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Upload result:
+  - `exito` (bool) - Success status
+  - `mensaje` (string) - Result message
+  - `ruta` (string|null) - Saved file path
+</ResponseField>
+
+#### Process Flow
+
+1. Validates image using `validar_imagen()`
+2. Creates upload directory if it doesn't exist
+3. Gets current photo to delete later
+4. Generates unique filename: `perfil_{id_usuario}_{timestamp}.{ext}`
+5. Moves uploaded file to `uploads/perfiles/`
+6. Updates database with new photo path
+7. Deletes old photo file
+8. Rolls back on database error
+
+#### Code Example
+
+```php
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['foto_perfil'])) {
+    $resultado = subir_foto_perfil(
+        $conexion,
+        $_SESSION['user_id'],
+        $_FILES['foto_perfil']
+    );
+    
+    if ($resultado['exito']) {
+        echo "Foto guardada: {$resultado['ruta']}";
+        // Display new photo
+        echo "<img src='{$resultado['ruta']}' alt='Perfil'>";
+    } else {
+        echo "Error: {$resultado['mensaje']}";
+    }
+}
+```
+
+#### Directory Structure
+
+```
+project-root/
+└── uploads/
+    └── perfiles/
+        ├── perfil_1_1718123456.jpg
+        ├── perfil_2_1718123789.png
+        └── perfil_5_1718124000.jpg
+```
+
+---
+
+### obtener_foto_perfil
+
+Get the file path of a user's profile photo.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id_usuario" type="int" required>
+  User ID
+</ParamField>
+
+<ResponseField name="return" type="string|null">
+  Relative path to photo file, or null if no photo exists
+</ResponseField>
+
+#### Code Example
+
+```php
+$foto = obtener_foto_perfil($conexion, $_SESSION['user_id']);
+
+if ($foto) {
+    echo "<img src='{$foto}' alt='Foto de perfil'>";
+} else {
+    echo "<img src='img/default-avatar.png' alt='Avatar por defecto'>";
+}
+```
+
+---
+
+### eliminar_foto_perfil
+
+Delete a user's profile photo from database and filesystem.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id_usuario" type="int" required>
+  User ID
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Result:
+  - `exito` (bool) - Success status
+  - `mensaje` (string) - Result message
+</ResponseField>
+
+#### Process
+
+1. Gets current photo path from database
+2. Deletes physical file from filesystem
+3. Sets `foto_perfil` column to NULL in database
+4. Returns result
+
+#### Code Example
+
+```php
+if (isset($_POST['eliminar_foto'])) {
+    $resultado = eliminar_foto_perfil($conexion, $_SESSION['user_id']);
+    
+    if ($resultado['exito']) {
+        echo $resultado['mensaje'];  // "Foto eliminada correctamente"
+    } else {
+        echo "Error: {$resultado['mensaje']}";
+    }
+}
+```
+
+---
+
+## Complete Profile Photo Workflow
+
+```php
+// HTML form
+echo '<form method="POST" enctype="multipart/form-data">';
+echo '  <input type="file" name="foto_perfil" accept="image/*">';
+echo '  <button type="submit" name="subir">Subir foto</button>';
+echo '  <button type="submit" name="eliminar">Eliminar foto</button>';
+echo '</form>';
+
+// Processing
+if (isset($_POST['subir']) && isset($_FILES['foto_perfil'])) {
+    $resultado = subir_foto_perfil(
+        $conexion,
+        $_SESSION['user_id'],
+        $_FILES['foto_perfil']
+    );
+    
+    if ($resultado['exito']) {
+        $_SESSION['foto_perfil'] = $resultado['ruta'];
+    }
+    echo $resultado['mensaje'];
+}
+
+if (isset($_POST['eliminar'])) {
+    $resultado = eliminar_foto_perfil($conexion, $_SESSION['user_id']);
+    if ($resultado['exito']) {
+        unset($_SESSION['foto_perfil']);
+    }
+    echo $resultado['mensaje'];
+}
+
+// Display current photo
+$foto = obtener_foto_perfil($conexion, $_SESSION['user_id']);
+if ($foto) {
+    echo "<img src='{$foto}' class='profile-photo'>";
+} else {
+    echo "<div class='no-photo'>Sin foto</div>";
+}
+```
+
+---
+
+## Security Best Practices
+
+<Warning>
+  **Image Upload Security**:
+  - Always validate file type with both MIME and extension checks
+  - Use `getimagesize()` to verify it's a real image
+  - Generate unique filenames to prevent overwrites
+  - Store uploads outside web root when possible
+  - Limit file sizes to prevent DoS attacks
+  - Set proper directory permissions (0755)
+</Warning>
+
+<Info>
+  **Data Sanitization**:
+  - Sanitize ALL user input before display
+  - Use prepared statements for SQL queries (already implemented in all database functions)
+  - Apply `sanitize_input()` to form data, URL parameters, and any external data
+  - Remember: sanitization is for output, not storage
+</Info>

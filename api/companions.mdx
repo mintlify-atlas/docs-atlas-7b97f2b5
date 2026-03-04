@@ -1,0 +1,239 @@
+---
+title: Companions
+description: Functions for managing reservation companions
+---
+
+## Overview
+
+Companion functions handle the management of additional people (acompañantes) associated with reservations in the Refugio system.
+
+## Functions
+
+### obtener_acompanantes
+
+Get all companions for a specific reservation.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id_reserva" type="int" required>
+  Reservation ID
+</ParamField>
+
+<ResponseField name="return" type="array">
+  Array of companion objects ordered by ID. Returns empty array on error.
+</ResponseField>
+
+#### SQL Query
+
+```sql
+SELECT * FROM acompanantes
+WHERE id_reserva = :id_reserva
+ORDER BY id
+```
+
+#### Code Example
+
+```php
+$acompanantes = obtener_acompanantes($conexion, 42);
+foreach ($acompanantes as $acomp) {
+    echo "{$acomp['nombre']} {$acomp['apellido1']}";
+    if ($acomp['es_socio']) {
+        echo " - Socio #{$acomp['num_socio']}";
+    }
+}
+```
+
+---
+
+### agregar_acompanante
+
+Add a companion to a reservation.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id_reserva" type="int" required>
+  Reservation ID
+</ParamField>
+
+<ParamField path="datos" type="array" required>
+  Companion data:
+  - `num_socio` (string) - Member number (if member)
+  - `es_socio` (bool) - Whether companion is a member
+  - `dni` (string) - National ID
+  - `nombre` (string) - First name
+  - `apellido1` (string) - First surname
+  - `apellido2` (string) - Second surname
+  - `actividad` (string) - Planned activity
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True on success, false on failure
+</ResponseField>
+
+#### SQL Query
+
+```sql
+INSERT INTO acompanantes (
+    id_reserva, num_socio, es_socio, dni, 
+    nombre, apellido1, apellido2, actividad
+)
+VALUES (
+    :id_reserva, :num_socio, :es_socio, :dni,
+    :nombre, :apellido1, :apellido2, :actividad
+)
+```
+
+#### Code Example
+
+```php
+// Add a member companion
+$datos_socio = [
+    'num_socio' => '54321',
+    'es_socio' => true,
+    'dni' => '87654321B',
+    'nombre' => 'María',
+    'apellido1' => 'López',
+    'apellido2' => 'García',
+    'actividad' => 'Senderismo'
+];
+
+if (agregar_acompanante($conexion, 42, $datos_socio)) {
+    echo "Acompañante agregado correctamente";
+}
+
+// Add a non-member companion
+$datos_no_socio = [
+    'num_socio' => null,
+    'es_socio' => false,
+    'dni' => '11223344C',
+    'nombre' => 'Pedro',
+    'apellido1' => 'Martínez',
+    'apellido2' => 'Ruiz',
+    'actividad' => 'Escalada'
+];
+
+agregar_acompanante($conexion, 42, $datos_no_socio);
+```
+
+---
+
+### eliminar_acompanante
+
+Remove a companion from the system.
+
+<ParamField path="conexion" type="PDO" required>
+  Database connection object
+</ParamField>
+
+<ParamField path="id" type="int" required>
+  Companion ID
+</ParamField>
+
+<ResponseField name="return" type="bool">
+  True on success, false on failure
+</ResponseField>
+
+#### Code Example
+
+```php
+if (eliminar_acompanante($conexion, 15)) {
+    echo "Acompañante eliminado correctamente";
+} else {
+    echo "Error al eliminar acompañante";
+}
+```
+
+<Warning>
+  This permanently deletes the companion record. Consider the impact on reservation data.
+</Warning>
+
+---
+
+## Data Structure
+
+### Companion Fields
+
+The `acompanantes` table contains the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | int | Companion ID (auto-increment) |
+| id_reserva | int | Associated reservation ID |
+| num_socio | string | Member number (nullable) |
+| es_socio | boolean | Whether companion is a club member |
+| dni | string | National ID number |
+| nombre | string | First name |
+| apellido1 | string | First surname |
+| apellido2 | string | Second surname |
+| actividad | string | Planned activity |
+
+---
+
+## Integration Example
+
+Complete workflow for managing companions on a reservation:
+
+```php
+// 1. Get existing companions
+$reserva = obtener_reserva($conexion, 42);
+$acompanantes_actuales = $reserva['acompanantes'];
+
+echo "Acompañantes actuales: " . count($acompanantes_actuales) . "\n";
+
+// 2. Add a new companion
+$nuevo_acompanante = [
+    'num_socio' => '99999',
+    'es_socio' => true,
+    'dni' => '99887766D',
+    'nombre' => 'Ana',
+    'apellido1' => 'Fernández',
+    'apellido2' => 'Sánchez',
+    'actividad' => 'Montañismo'
+];
+
+if (agregar_acompanante($conexion, 42, $nuevo_acompanante)) {
+    echo "Nuevo acompañante agregado\n";
+}
+
+// 3. Refresh companion list
+$acompanantes_actualizados = obtener_acompanantes($conexion, 42);
+echo "Total acompañantes: " . count($acompanantes_actualizados) . "\n";
+
+// 4. Remove a companion if needed
+if (isset($_POST['eliminar_acompanante'])) {
+    $id_acomp = (int)$_POST['id_acompanante'];
+    if (eliminar_acompanante($conexion, $id_acomp)) {
+        echo "Acompañante eliminado\n";
+    }
+}
+```
+
+---
+
+## Validation Considerations
+
+<Info>
+  When implementing companion management in your application:
+  - Validate that the reservation exists before adding companions
+  - Check bed capacity: total people (reservation holder + companions) should not exceed reserved beds
+  - Sanitize input data before passing to these functions
+  - Consider implementing companion limits based on reservation bed count
+</Info>
+
+### Example Validation
+
+```php
+$reserva = obtener_reserva($conexion, 42);
+$total_personas = 1 + count($reserva['acompanantes']); // 1 = titular
+
+if ($total_personas >= $reserva['numero_camas']) {
+    echo "No se pueden agregar más acompañantes. Capacidad máxima alcanzada.";
+} else {
+    // Proceed to add companion
+    agregar_acompanante($conexion, 42, $datos);
+}
+```

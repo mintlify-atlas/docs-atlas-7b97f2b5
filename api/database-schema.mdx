@@ -1,0 +1,487 @@
+---
+title: Database Schema
+description: Complete database schema documentation for the Refugio mountain refuge bed reservation management system
+---
+
+## Overview
+
+The Refugio database is designed to manage bed reservations in mountain refuges. It consists of 6 main tables that handle users, rooms, beds, reservations, bed-reservation relationships, and companions.
+
+## Database Support
+
+The system supports both:
+- **PostgreSQL** (Primary, with native ENUM support)
+- **MySQL** (Alternative, using VARCHAR with CHECK constraints)
+
+## Tables Structure
+
+### usuarios (Users)
+
+Stores information about system users (members and administrators).
+
+```sql
+CREATE TABLE usuarios (
+    id SERIAL PRIMARY KEY,
+    num_socio VARCHAR(50) UNIQUE NOT NULL,
+    dni VARCHAR(20) UNIQUE NOT NULL,
+    telf VARCHAR(20),
+    email VARCHAR(100) UNIQUE NOT NULL,
+    nombre VARCHAR(100) NOT NULL,
+    apellido1 VARCHAR(100) NOT NULL,
+    apellido2 VARCHAR(100),
+    password VARCHAR(255) NOT NULL,
+    rol VARCHAR(20) NOT NULL CHECK (rol IN ('admin', 'user')),
+    foto_perfil VARCHAR(255),
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Fields:**
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | SERIAL | PRIMARY KEY | Auto-incrementing user identifier |
+| `num_socio` | VARCHAR(50) | UNIQUE, NOT NULL | Member number (e.g., A001, U001) |
+| `dni` | VARCHAR(20) | UNIQUE, NOT NULL | National ID document |
+| `telf` | VARCHAR(20) | | Phone number |
+| `email` | VARCHAR(100) | UNIQUE, NOT NULL | Email address (used for login) |
+| `nombre` | VARCHAR(100) | NOT NULL | First name |
+| `apellido1` | VARCHAR(100) | NOT NULL | First surname |
+| `apellido2` | VARCHAR(100) | | Second surname |
+| `password` | VARCHAR(255) | NOT NULL | Bcrypt hashed password |
+| `rol` | VARCHAR(20) | NOT NULL | User role (ENUM: 'admin', 'user') |
+| `foto_perfil` | VARCHAR(255) | | Profile picture path |
+| `fecha_creacion` | TIMESTAMP | DEFAULT NOW | Account creation timestamp |
+
+**ENUM Values:**
+- `rol`: `'admin'` (administrator), `'user'` (regular member)
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- UNIQUE on `num_socio`, `dni`, `email`
+
+**Sample Data:**
+```sql
+INSERT INTO usuarios (num_socio, dni, email, nombre, apellido1, password, rol) VALUES
+('A001', '12345678A', 'admin@hostel.com', 'Admin', 'Principal', '$2y$10$...', 'admin'),
+('U001', '87654321B', 'user1@mail.com', 'Juan', 'Pérez', '$2y$10$...', 'user');
+```
+
+---
+
+### habitaciones (Rooms)
+
+Stores information about available rooms in the refuge.
+
+```sql
+CREATE TABLE habitaciones (
+    id SERIAL PRIMARY KEY,
+    numero VARCHAR(10) UNIQUE NOT NULL,
+    capacidad INTEGER NOT NULL,
+    descripcion TEXT
+);
+```
+
+**Fields:**
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | SERIAL | PRIMARY KEY | Auto-incrementing room identifier |
+| `numero` | VARCHAR(10) | UNIQUE, NOT NULL | Room number (e.g., 101, 102, 103, 104) |
+| `capacidad` | INTEGER | NOT NULL | Maximum bed capacity |
+| `descripcion` | TEXT | | Room description |
+
+**Sample Data:**
+```sql
+INSERT INTO habitaciones (numero, capacidad) VALUES
+('101', 8),
+('102', 8),
+('103', 6),
+('104', 4);
+```
+
+**Total Beds:** 26 beds across 4 rooms
+
+---
+
+### camas (Beds)
+
+Stores individual bed information within rooms.
+
+```sql
+CREATE TABLE camas (
+    id SERIAL PRIMARY KEY,
+    numero INTEGER NOT NULL,
+    id_habitacion INTEGER NOT NULL REFERENCES habitaciones(id) ON DELETE CASCADE,
+    estado VARCHAR(20) DEFAULT 'libre' CHECK (estado IN ('libre', 'pendiente', 'reservada')),
+    UNIQUE (id_habitacion, numero)
+);
+```
+
+**Fields:**
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | SERIAL | PRIMARY KEY | Auto-incrementing bed identifier |
+| `numero` | INTEGER | NOT NULL | Bed number within the room |
+| `id_habitacion` | INTEGER | NOT NULL, FK | Foreign key to habitaciones table |
+| `estado` | VARCHAR(20) | DEFAULT 'libre' | Bed status (ENUM: 'libre', 'pendiente', 'reservada') |
+
+**ENUM Values:**
+- `estado`: 
+  - `'libre'` (available)
+  - `'pendiente'` (pending approval)
+  - `'reservada'` (confirmed reservation)
+
+**Foreign Keys:**
+- `id_habitacion` → `habitaciones(id)` ON DELETE CASCADE
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- UNIQUE on (`id_habitacion`, `numero`)
+
+**Sample Data:**
+```sql
+-- Room 101 has 8 beds (numbered 1-8)
+INSERT INTO camas (numero, id_habitacion, estado) VALUES
+(1, 1, 'libre'),
+(2, 1, 'libre'),
+...
+(8, 1, 'libre');
+```
+
+---
+
+### reservas (Reservations)
+
+Stores reservation information.
+
+```sql
+CREATE TABLE reservas (
+    id SERIAL PRIMARY KEY,
+    id_usuario INTEGER REFERENCES usuarios(id) ON DELETE SET NULL,
+    id_habitacion INTEGER REFERENCES habitaciones(id) ON DELETE CASCADE,
+    numero_camas INTEGER NOT NULL DEFAULT 1,
+    fecha_inicio DATE NOT NULL,
+    fecha_fin DATE NOT NULL,
+    estado VARCHAR(20) DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'reservada', 'cancelada')),
+    observaciones TEXT,
+    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Fields:**
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | SERIAL | PRIMARY KEY | Auto-incrementing reservation identifier |
+| `id_usuario` | INTEGER | FK, NULL | Foreign key to usuarios table (NULL for special admin reservations) |
+| `id_habitacion` | INTEGER | FK, NULL | Foreign key to habitaciones table (NULL for whole refuge reservations) |
+| `numero_camas` | INTEGER | NOT NULL, DEFAULT 1 | Number of beds reserved |
+| `fecha_inicio` | DATE | NOT NULL | Reservation start date |
+| `fecha_fin` | DATE | NOT NULL | Reservation end date |
+| `estado` | VARCHAR(20) | DEFAULT 'pendiente' | Reservation status |
+| `observaciones` | TEXT | | Additional notes or reason for special reservations |
+| `fecha_creacion` | TIMESTAMP | DEFAULT NOW | Reservation creation timestamp |
+
+**ENUM Values:**
+- `estado`:
+  - `'pendiente'` (pending admin approval)
+  - `'reservada'` (confirmed/approved)
+  - `'cancelada'` (cancelled)
+
+**Foreign Keys:**
+- `id_usuario` → `usuarios(id)` ON DELETE SET NULL
+- `id_habitacion` → `habitaciones(id)` ON DELETE CASCADE
+
+**Special Cases:**
+- When `id_usuario` IS NULL: Special admin reservation (events, maintenance)
+- When `id_habitacion` IS NULL: Whole refuge reservation (entire facility booked)
+- When both are NOT NULL: Regular member reservation
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- Index on `id_usuario`
+- Index on `id_habitacion`
+- Index on `fecha_inicio`, `fecha_fin` (for date range queries)
+
+---
+
+### reservas_camas (Reservation-Bed Relationships)
+
+Junction table linking reservations to specific beds.
+
+```sql
+CREATE TABLE reservas_camas (
+    id SERIAL PRIMARY KEY,
+    id_reserva INTEGER NOT NULL REFERENCES reservas(id) ON DELETE CASCADE,
+    id_cama INTEGER NOT NULL REFERENCES camas(id) ON DELETE CASCADE,
+    UNIQUE (id_reserva, id_cama)
+);
+```
+
+**Fields:**
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | SERIAL | PRIMARY KEY | Auto-incrementing identifier |
+| `id_reserva` | INTEGER | NOT NULL, FK | Foreign key to reservas table |
+| `id_cama` | INTEGER | NOT NULL, FK | Foreign key to camas table |
+
+**Foreign Keys:**
+- `id_reserva` → `reservas(id)` ON DELETE CASCADE
+- `id_cama` → `camas(id)` ON DELETE CASCADE
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- UNIQUE on (`id_reserva`, `id_cama`)
+- Index on `id_reserva`
+- Index on `id_cama`
+
+**Purpose:**
+This table implements a many-to-many relationship between reservations and beds, allowing:
+- One reservation to include multiple beds
+- Tracking exactly which beds are assigned to each reservation
+- Automatic cleanup when reservations or beds are deleted
+
+---
+
+### acompanantes (Companions)
+
+Stores information about companions accompanying the main reservation holder.
+
+```sql
+CREATE TABLE acompanantes (
+    id SERIAL PRIMARY KEY,
+    id_reserva INTEGER NOT NULL REFERENCES reservas(id) ON DELETE CASCADE,
+    num_socio VARCHAR(50),
+    es_socio BOOLEAN DEFAULT false,
+    dni VARCHAR(20),
+    nombre VARCHAR(100) NOT NULL,
+    apellido1 VARCHAR(100) NOT NULL,
+    apellido2 VARCHAR(100),
+    actividad VARCHAR(255),
+    fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**Fields:**
+
+| Field | Type | Constraints | Description |
+|-------|------|-------------|-------------|
+| `id` | SERIAL | PRIMARY KEY | Auto-incrementing companion identifier |
+| `id_reserva` | INTEGER | NOT NULL, FK | Foreign key to reservas table |
+| `num_socio` | VARCHAR(50) | | Member number (if companion is a member) |
+| `es_socio` | BOOLEAN | DEFAULT false | Whether companion is a club member |
+| `dni` | VARCHAR(20) | | National ID document |
+| `nombre` | VARCHAR(100) | NOT NULL | First name |
+| `apellido1` | VARCHAR(100) | NOT NULL | First surname |
+| `apellido2` | VARCHAR(100) | | Second surname |
+| `actividad` | VARCHAR(255) | | Planned activity description |
+| `fecha_registro` | TIMESTAMP | DEFAULT NOW | Registration timestamp |
+
+**Foreign Keys:**
+- `id_reserva` → `reservas(id)` ON DELETE CASCADE
+
+**Indexes:**
+- PRIMARY KEY on `id`
+- Index on `id_reserva`
+
+**Business Rules:**
+- If `es_socio` = true, `num_socio` should be provided
+- Non-members require `dni` for legal purposes
+- Multiple companions can be registered per reservation
+
+---
+
+## Entity Relationship Diagram
+
+```
+┌─────────────────┐
+│    usuarios     │
+├─────────────────┤
+│ id (PK)         │
+│ num_socio       │
+│ dni             │
+│ email           │
+│ password        │
+│ rol             │
+└────────┬────────┘
+         │
+         │ 1:N
+         │
+         ▼
+┌─────────────────┐         ┌──────────────────┐
+│    reservas     │────────▶│  acompanantes    │
+├─────────────────┤  1:N    ├──────────────────┤
+│ id (PK)         │         │ id (PK)          │
+│ id_usuario (FK) │         │ id_reserva (FK)  │
+│ id_habitacion   │         │ nombre           │
+│ numero_camas    │         │ es_socio         │
+│ fecha_inicio    │         └──────────────────┘
+│ fecha_fin       │
+│ estado          │
+└────────┬────────┘
+         │
+         │ N:M
+         │
+         ▼
+┌─────────────────┐         ┌──────────────────┐
+│ reservas_camas  │────────▶│      camas       │
+├─────────────────┤         ├──────────────────┤
+│ id (PK)         │         │ id (PK)          │
+│ id_reserva (FK) │         │ numero           │
+│ id_cama (FK)    │         │ id_habitacion(FK)│
+└─────────────────┘         │ estado           │
+                            └────────┬─────────┘
+                                     │
+                                     │ N:1
+                                     │
+                                     ▼
+                            ┌──────────────────┐
+                            │  habitaciones    │
+                            ├──────────────────┤
+                            │ id (PK)          │
+                            │ numero           │
+                            │ capacidad        │
+                            └──────────────────┘
+```
+
+## Relationships Summary
+
+1. **usuarios → reservas** (1:N)
+   - One user can have multiple reservations
+   - Reservations can exist without users (special admin reservations)
+
+2. **habitaciones → camas** (1:N)
+   - One room contains multiple beds
+   - Beds are deleted when room is deleted (CASCADE)
+
+3. **habitaciones → reservas** (1:N)
+   - One room can have multiple reservations (different time periods)
+   - Reservations can exist without rooms (whole refuge reservations)
+
+4. **reservas → acompanantes** (1:N)
+   - One reservation can have multiple companions
+   - Companions are deleted when reservation is deleted (CASCADE)
+
+5. **reservas ↔ camas** (N:M via reservas_camas)
+   - One reservation can include multiple beds
+   - One bed can be in multiple reservations (different time periods)
+   - Junction table handles the relationship
+
+## Data Integrity Rules
+
+### Cascading Deletes
+
+- Deleting a **room** → deletes all its **beds** and **reservations**
+- Deleting a **reservation** → deletes all **companion** records and **bed assignments**
+- Deleting a **bed** → removes it from all **reservation-bed relationships**
+
+### Set NULL
+
+- Deleting a **user** → sets `id_usuario` to NULL in their **reservations** (preserves reservation history)
+
+### Uniqueness Constraints
+
+- **usuarios**: `num_socio`, `dni`, `email` must be unique
+- **habitaciones**: `numero` must be unique
+- **camas**: combination of (`id_habitacion`, `numero`) must be unique
+- **reservas_camas**: combination of (`id_reserva`, `id_cama`) must be unique
+
+## Business Logic Constraints
+
+### Date Validation
+
+- `fecha_fin` must be greater than or equal to `fecha_inicio`
+- No overlapping reservations for the same bed
+- Check availability before creating reservations
+
+### Bed Assignment
+
+- Number of assigned beds in `reservas_camas` must match `numero_camas` in `reservas`
+- Beds must be available (not reserved) for the requested date range
+- Beds must belong to the specified room
+
+### State Transitions
+
+**Reservation States:**
+- New reservation → `'pendiente'`
+- Admin approval → `'reservada'`
+- User/Admin cancellation → `'cancelada'`
+
+**Bed States:**
+- When reservation is pending → bed = `'pendiente'`
+- When reservation is approved → bed = `'reservada'`
+- When reservation is cancelled → bed = `'libre'`
+
+### Special Reservation Types
+
+1. **Regular Member Reservation:**
+   - `id_usuario` IS NOT NULL
+   - `id_habitacion` IS NOT NULL
+   - Initial state: `'pendiente'`
+
+2. **Admin-Created Reservation (for member):**
+   - `id_usuario` IS NOT NULL
+   - `id_habitacion` IS NOT NULL
+   - Initial state: `'reservada'` (auto-approved)
+
+3. **Special Event Reservation:**
+   - `id_usuario` IS NULL
+   - `id_habitacion` IS NOT NULL
+   - State: `'reservada'`
+   - Reason in `observaciones`
+
+4. **Whole Refuge Reservation:**
+   - `id_usuario` IS NULL
+   - `id_habitacion` IS NULL
+   - State: `'reservada'`
+   - Reserves ALL beds in the refuge
+   - Requires all beds to be available
+
+## Indexes for Performance
+
+Recommended indexes for optimal query performance:
+
+```sql
+-- Search by email (login)
+CREATE INDEX idx_usuarios_email ON usuarios(email);
+
+-- Search reservations by user
+CREATE INDEX idx_reservas_usuario ON reservas(id_usuario);
+
+-- Search reservations by room
+CREATE INDEX idx_reservas_habitacion ON reservas(id_habitacion);
+
+-- Date range queries for availability
+CREATE INDEX idx_reservas_fechas ON reservas(fecha_inicio, fecha_fin);
+
+-- Reservation status queries
+CREATE INDEX idx_reservas_estado ON reservas(estado);
+
+-- Bed assignments lookup
+CREATE INDEX idx_reservas_camas_reserva ON reservas_camas(id_reserva);
+CREATE INDEX idx_reservas_camas_cama ON reservas_camas(id_cama);
+
+-- Companion lookup
+CREATE INDEX idx_acompanantes_reserva ON acompanantes(id_reserva);
+
+-- Room beds lookup
+CREATE INDEX idx_camas_habitacion ON camas(id_habitacion);
+```
+
+## Database Statistics
+
+Typical system configuration:
+
+- **Users:** 3+ (1 admin, 2+ regular members)
+- **Rooms:** 4 (101, 102, 103, 104)
+- **Beds:** 26 total
+  - Room 101: 8 beds
+  - Room 102: 8 beds
+  - Room 103: 6 beds
+  - Room 104: 4 beds
+- **Reservation States:** 3 (pendiente, reservada, cancelada)
+- **Bed States:** 3 (libre, pendiente, reservada)
+- **User Roles:** 2 (admin, user)

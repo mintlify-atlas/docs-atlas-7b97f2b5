@@ -1,0 +1,581 @@
+---
+title: 'Reservation System'
+description: 'Complete reservation workflow from creation to approval with bed assignment'
+icon: 'calendar-check'
+---
+
+## Overview
+
+The reservation system manages bed bookings with automated availability checking, bed assignment, and a multi-state approval workflow.
+
+## Reservation States
+
+Reservations progress through three states:
+
+<Steps>
+  <Step title="Pendiente (Pending)">
+    Initial state when user creates a reservation. Awaits admin approval.
+  </Step>
+  <Step title="Reservada (Approved)">
+    Admin has approved the reservation. Beds are confirmed.
+  </Step>
+  <Step title="Cancelada (Cancelled)">
+    Reservation has been cancelled by user or rejected by admin.
+  </Step>
+</Steps>
+
+## Creating a Reservation
+
+### User Reservation Flow
+
+Users create reservations through `viewSocio.php` which calls `crear_reserva()` in `functions.php:894-968`:
+
+<CodeGroup>
+```php functions.php - crear_reserva()
+function crear_reserva($conexion, $datos)
+{
+    // Validate number of beds
+    $numero_camas = isset($datos['numero_camas']) ? (int) $datos['numero_camas'] : 1;
+    if ($numero_camas < 1) {
+        throw new Exception("Debes reservar al menos 1 cama");
+    }
+
+    // Find available beds in the room
+    $stmt = $conexion->prepare("
+        SELECT id FROM camas
+        WHERE id_habitacion = :id_habitacion
+        AND id NOT IN (
+            SELECT DISTINCT c.id
+            FROM camas c
+            INNER JOIN reservas_camas rc ON c.id = rc.id_cama
+            INNER JOIN reservas r ON rc.id_reserva = r.id
+            WHERE c.id_habitacion = :id_habitacion
+            AND r.estado IN ('pendiente', 'reservada')
+            AND (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
+        )
+        ORDER BY numero
+        LIMIT :numero_camas
+    ");
+
+    $stmt->bindParam(':id_habitacion', $datos['id_habitacion'], PDO::PARAM_INT);
+    $stmt->bindParam(':fecha_inicio', $datos['fecha_inicio']);
+    $stmt->bindParam(':fecha_fin', $datos['fecha_fin']);
+    $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
+    $stmt->execute();
+
+    $camas_disponibles = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+    if (count($camas_disponibles) < $numero_camas) {
+        throw new Exception("No hay suficientes camas disponibles en esta habitación");
+    }
+
+    // Insert reservation with 'pendiente' status
+    $stmt = $conexion->prepare("
+        INSERT INTO reservas (id_usuario, id_habitacion, numero_camas, 
+                             fecha_inicio, fecha_fin, estado)
+        VALUES (:id_usuario, :id_habitacion, :numero_camas, 
+               :fecha_inicio, :fecha_fin, 'pendiente')
+    ");
+
+    $stmt->bindParam(':id_usuario', $datos['id_usuario'], PDO::PARAM_INT);
+    $stmt->bindParam(':id_habitacion', $datos['id_habitacion'], PDO::PARAM_INT);
+    $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
+    $stmt->bindParam(':fecha_inicio', $datos['fecha_inicio']);
+    $stmt->bindParam(':fecha_fin', $datos['fecha_fin']);
+
+    $stmt->execute();
+    $id_reserva = $conexion->lastInsertId();
+
+    // Create relationship between reservation and assigned beds
+    $stmt_cama = $conexion->prepare(
+        "INSERT INTO reservas_camas (id_reserva, id_cama) 
+         VALUES (:id_reserva, :id_cama)"
+    );
+
+    // Update bed status
+    $stmt_update = $conexion->prepare(
+        "UPDATE camas SET estado = 'pendiente' WHERE id = :id_cama"
+    );
+
+    foreach ($camas_disponibles as $id_cama) {
+        $stmt_cama->bindParam(':id_reserva', $id_reserva, PDO::PARAM_INT);
+        $stmt_cama->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
+        $stmt_cama->execute();
+
+        $stmt_update->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
+        $stmt_update->execute();
+    }
+
+    return $id_reserva;
+}
+```
+</CodeGroup>
+
+<Note>
+Reservations check for overlapping dates using the condition: `r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio`
+</Note>
+
+### Admin-Created Reservations
+
+Admins can create pre-approved reservations using `crear_reserva_para_socio()` in `functions.php:809-886`:
+
+<CodeGroup>
+```php functions.php - crear_reserva_para_socio()
+function crear_reserva_para_socio($conexion, $datos)
+{
+    try {
+        $conexion->beginTransaction();
+
+        $numero_camas = isset($datos['numero_camas']) ? (int) $datos['numero_camas'] : 1;
+        if ($numero_camas < 1) {
+            throw new Exception("Debes reservar al menos 1 cama");
+        }
+
+        // Find available beds... (same logic as crear_reserva)
+
+        // Create reservation with 'reservada' status (auto-approved)
+        $stmt = $conexion->prepare("
+            INSERT INTO reservas (id_usuario, id_habitacion, numero_camas, 
+                                 fecha_inicio, fecha_fin, estado)
+            VALUES (:id_usuario, :id_habitacion, :numero_camas, 
+                   :fecha_inicio, :fecha_fin, 'reservada')
+        ");
+
+        // ... bind and execute
+
+        $conexion->commit();
+        return $id_reserva;
+    } catch (Exception $e) {
+        $conexion->rollBack();
+        error_log("Error al crear reserva para socio: " . $e->getMessage());
+        return false;
+    }
+}
+```
+</CodeGroup>
+
+## Approval Workflow
+
+### Approving Reservations
+
+Admins approve pending reservations through `actualizar_estado_reserva()` in `functions.php:1163-1210`:
+
+<CodeGroup>
+```php functions.php
+function actualizar_estado_reserva($conexion, $id, $estado)
+{
+    try {
+        $conexion->beginTransaction();
+
+        // Get beds assigned to this reservation
+        $stmt = $conexion->prepare(
+            "SELECT id_cama FROM reservas_camas WHERE id_reserva = :id"
+        );
+        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+        $stmt->execute();
+        $camas = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+        if (empty($camas)) {
+            $conexion->rollBack();
+            return false;
+        }
+
+        // Update reservation status
+        $stmt = $conexion->prepare(
+            "UPDATE reservas SET estado = :estado WHERE id = :id"
+        );
+        $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+        $stmt->bindParam(':estado', $estado);
+        $stmt->execute();
+
+        // Update bed status accordingly
+        $estado_cama = 'libre';
+        if ($estado === 'reservada') {
+            $estado_cama = 'reservada';
+        } elseif ($estado === 'pendiente') {
+            $estado_cama = 'pendiente';
+        }
+
+        $stmt_update = $conexion->prepare(
+            "UPDATE camas SET estado = :estado WHERE id = :id_cama"
+        );
+        $stmt_update->bindParam(':estado', $estado_cama);
+
+        foreach ($camas as $id_cama) {
+            $stmt_update->bindParam(':id_cama', $id_cama, PDO::PARAM_INT);
+            $stmt_update->execute();
+        }
+
+        $conexion->commit();
+        return true;
+    } catch (PDOException $e) {
+        $conexion->rollBack();
+        error_log("Error al actualizar estado de reserva: " . $e->getMessage());
+        return false;
+    }
+}
+```
+</CodeGroup>
+
+### Admin Actions in viewAdmin.php
+
+<CodeGroup>
+```php viewAdmin.php - Approve Reservation
+case 'aprobar_reserva':
+    $id = (int) $_POST['id'];
+    if (actualizar_estado_reserva($conexionPDO, $id, 'reservada')) {
+        $mensaje = "Reserva aprobada exitosamente";
+    } else {
+        $mensaje = "Error al aprobar la reserva";
+        $tipo_mensaje = 'danger';
+    }
+    $accion = 'reservas';
+    break;
+```
+
+```php viewAdmin.php - Reject Reservation
+case 'rechazar_reserva':
+    $id = (int) $_POST['id'];
+    if (cancelar_reserva($conexionPDO, $id)) {
+        $mensaje = "Reserva rechazada exitosamente";
+    } else {
+        $mensaje = "Error al rechazar la reserva";
+        $tipo_mensaje = 'danger';
+    }
+    $accion = 'reservas';
+    break;
+```
+</CodeGroup>
+
+## Listing Reservations
+
+The `listar_reservas()` function in `functions.php:628-715` supports pagination, filtering, and search:
+
+<CodeGroup>
+```php functions.php - listar_reservas()
+function listar_reservas($conexion, $filtros = [])
+{
+    try {
+        $sql = "
+            SELECT r.id, r.fecha_inicio, r.fecha_fin, r.estado, r.fecha_creacion,
+                   r.id_habitacion, r.numero_camas, r.observaciones,
+                   u.nombre, u.apellido1, u.apellido2, u.num_socio, u.email,
+                   h.numero as habitacion_numero,
+                   GROUP_CONCAT(c.numero ORDER BY c.numero SEPARATOR ', ') as camas_numeros
+            FROM reservas r
+            LEFT JOIN usuarios u ON r.id_usuario = u.id
+            LEFT JOIN habitaciones h ON r.id_habitacion = h.id
+            LEFT JOIN reservas_camas rc ON r.id = rc.id_reserva
+            LEFT JOIN camas c ON rc.id_cama = c.id
+            WHERE 1=1
+        ";
+
+        $params = [];
+
+        // Apply filters
+        if (isset($filtros['estado'])) {
+            $sql .= " AND r.estado = :estado";
+            $params[':estado'] = $filtros['estado'];
+        }
+
+        if (isset($filtros['id_usuario'])) {
+            $sql .= " AND r.id_usuario = :id_usuario";
+            $params[':id_usuario'] = $filtros['id_usuario'];
+        }
+
+        if (isset($filtros['fecha_inicio'])) {
+            $sql .= " AND r.fecha_inicio >= :fecha_inicio";
+            $params[':fecha_inicio'] = $filtros['fecha_inicio'];
+        }
+
+        if (isset($filtros['fecha_fin'])) {
+            $sql .= " AND r.fecha_fin <= :fecha_fin";
+            $params[':fecha_fin'] = $filtros['fecha_fin'];
+        }
+
+        // Search functionality
+        if (!empty($filtros['search'])) {
+            $searchTerm = '%' . $filtros['search'] . '%';
+            $sql .= " AND (u.nombre LIKE :search OR u.apellido1 LIKE :search 
+                      OR u.email LIKE :search OR u.num_socio LIKE :search)";
+            $params[':search'] = $searchTerm;
+        }
+
+        $sql .= " GROUP BY r.id";
+
+        // Sorting
+        $allowed_sort_cols = ['fecha_inicio', 'fecha_fin', 'fecha_creacion', 'nombre'];
+        $order_by = in_array($filtros['order_by'] ?? '', $allowed_sort_cols) 
+                    ? $filtros['order_by'] : 'fecha_creacion';
+
+        if ($order_by === 'nombre') {
+            $order_by = 'u.nombre';
+        } else {
+            $order_by = 'r.' . $order_by;
+        }
+
+        $order_dir = strtoupper($filtros['order_dir'] ?? '') === 'ASC' ? 'ASC' : 'DESC';
+        $sql .= " ORDER BY $order_by $order_dir";
+
+        // Pagination
+        if (isset($filtros['limit']) && isset($filtros['offset'])) {
+            $sql .= " LIMIT :limit OFFSET :offset";
+            $params[':limit'] = (int) $filtros['limit'];
+            $params[':offset'] = (int) $filtros['offset'];
+        }
+
+        $stmt = $conexion->prepare($sql);
+
+        foreach ($params as $key => $value) {
+            if ($key === ':limit' || $key === ':offset') {
+                $stmt->bindValue($key, $value, PDO::PARAM_INT);
+            } else {
+                $stmt->bindValue($key, $value);
+            }
+        }
+
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        error_log("Error al listar reservas: " . $e->getMessage());
+        return [];
+    }
+}
+```
+</CodeGroup>
+
+## Special Reservation Types
+
+### Event Reservations
+
+Admins can create special reservations for events using `crear_reserva_especial_admin()`:
+
+<CodeGroup>
+```php functions.php:976-1060
+function crear_reserva_especial_admin($conexion, $datos)
+{
+    try {
+        $conexion->beginTransaction();
+
+        // Validate and find available beds...
+
+        // Insert special reservation (id_usuario = NULL)
+        $stmt = $conexion->prepare("
+            INSERT INTO reservas (id_usuario, id_habitacion, numero_camas, 
+                                 fecha_inicio, fecha_fin, estado, observaciones)
+            VALUES (NULL, :id_habitacion, :numero_camas, 
+                   :fecha_inicio, :fecha_fin, 'reservada', :motivo)
+        ");
+
+        $stmt->bindParam(':id_habitacion', $datos['id_habitacion'], PDO::PARAM_INT);
+        $stmt->bindParam(':numero_camas', $numero_camas, PDO::PARAM_INT);
+        $stmt->bindParam(':fecha_inicio', $datos['fecha_inicio']);
+        $stmt->bindParam(':fecha_fin', $datos['fecha_fin']);
+        $stmt->bindParam(':motivo', $datos['motivo']);
+
+        $stmt->execute();
+        $id_reserva = $conexion->lastInsertId();
+
+        // Assign beds and update their status...
+
+        $conexion->commit();
+        return $id_reserva;
+    } catch (Exception $e) {
+        $conexion->rollBack();
+        error_log("Error al crear reserva especial: " . $e->getMessage());
+        return false;
+    }
+}
+```
+</CodeGroup>
+
+### Whole Refuge Reservations
+
+The system supports reserving the entire refuge with `crear_reserva_todo_refugio()` in `functions.php:1068-1154`:
+
+<CodeGroup>
+```php functions.php
+function crear_reserva_todo_refugio($conexion, $datos)
+{
+    try {
+        $conexion->beginTransaction();
+
+        // Count total beds in refuge
+        $stmt_total = $conexion->prepare("SELECT COUNT(*) as total FROM camas");
+        $stmt_total->execute();
+        $total_camas_refugio = (int) $stmt_total->fetch(PDO::FETCH_ASSOC)['total'];
+
+        // Get ALL available beds for selected dates
+        $stmt_camas = $conexion->prepare("
+            SELECT c.id
+            FROM camas c
+            WHERE c.estado = 'libre'
+            AND c.id NOT IN (
+                SELECT DISTINCT rc.id_cama
+                FROM reservas_camas rc
+                INNER JOIN reservas r ON rc.id_reserva = r.id
+                WHERE r.estado IN ('pendiente', 'reservada')
+                AND (r.fecha_inicio <= :fecha_fin AND r.fecha_fin >= :fecha_inicio)
+            )
+            ORDER BY c.id_habitacion, c.numero
+        ");
+
+        $stmt_camas->bindParam(':fecha_inicio', $datos['fecha_inicio']);
+        $stmt_camas->bindParam(':fecha_fin', $datos['fecha_fin']);
+        $stmt_camas->execute();
+
+        $camas_disponibles = $stmt_camas->fetchAll(PDO::FETCH_COLUMN);
+        $total_camas_disponibles = count($camas_disponibles);
+
+        // VERIFY ALL BEDS ARE AVAILABLE
+        if ($total_camas_disponibles < $total_camas_refugio) {
+            throw new Exception(
+                "No se puede reservar TODO EL REFUGIO. Solo hay {$total_camas_disponibles} 
+                 de {$total_camas_refugio} camas disponibles."
+            );
+        }
+
+        // Create ONE reservation with id_habitacion = NULL for "WHOLE REFUGE"
+        $stmt_reserva = $conexion->prepare("
+            INSERT INTO reservas (id_usuario, id_habitacion, numero_camas, 
+                                 fecha_inicio, fecha_fin, estado, observaciones)
+            VALUES (NULL, NULL, :numero_camas, :fecha_inicio, :fecha_fin, 
+                   'reservada', :motivo)
+        ");
+
+        $motivo_completo = "TODO EL REFUGIO - " . $datos['motivo'];
+        $stmt_reserva->bindParam(':numero_camas', $total_camas_disponibles, PDO::PARAM_INT);
+        $stmt_reserva->bindParam(':fecha_inicio', $datos['fecha_inicio']);
+        $stmt_reserva->bindParam(':fecha_fin', $datos['fecha_fin']);
+        $stmt_reserva->bindParam(':motivo', $motivo_completo);
+        $stmt_reserva->execute();
+
+        $id_reserva = $conexion->lastInsertId();
+
+        // Assign ALL available beds to this reservation...
+
+        $conexion->commit();
+        return true;
+    } catch (Exception $e) {
+        $conexion->rollBack();
+        error_log("Error al crear reserva todo el refugio: " . $e->getMessage());
+        return false;
+    }
+}
+```
+</CodeGroup>
+
+<Warning>
+Whole refuge reservations require ALL beds to be available. If even one bed is occupied, the reservation will fail.
+</Warning>
+
+## Database Structure
+
+Reservations involve three main tables:
+
+<CardGroup cols={3}>
+<Card title="reservas" icon="table">
+  - id (PK)
+  - id_usuario (FK, nullable)
+  - id_habitacion (FK, nullable)
+  - numero_camas
+  - fecha_inicio
+  - fecha_fin
+  - estado
+  - observaciones
+  - fecha_creacion
+</Card>
+
+<Card title="reservas_camas" icon="link">
+  - id (PK)
+  - id_reserva (FK)
+  - id_cama (FK)
+</Card>
+
+<Card title="camas" icon="bed">
+  - id (PK)
+  - id_habitacion (FK)
+  - numero
+  - estado
+</Card>
+</CardGroup>
+
+## Editing Reservations
+
+### User Editing (Pending Only)
+
+Users can only edit pending reservations via `editar_reserva_usuario()` in `functions.php:1242-1281`:
+
+<CodeGroup>
+```php viewSocio.php:101-138
+case 'editar_reserva_usuario':
+    try {
+        $conexionPDO->beginTransaction();
+
+        $id_reserva = isset($_POST['id_reserva']) ? (int) $_POST['id_reserva'] : 0;
+        $fecha_inicio = $_POST['fecha_inicio'] ?? '';
+        $fecha_fin = $_POST['fecha_fin'] ?? '';
+        $id_habitacion = isset($_POST['id_habitacion']) ? (int) $_POST['id_habitacion'] : 0;
+        $numero_camas = isset($_POST['numero_camas']) ? (int) $_POST['numero_camas'] : 0;
+
+        $reserva_actual = obtener_reserva($conexionPDO, $id_reserva);
+        
+        // Verify ownership
+        if (!$reserva_actual || $reserva_actual['id_usuario'] != $_SESSION['userId']) {
+            throw new Exception("No tienes permiso para editar esta reserva");
+        }
+
+        // Only pending reservations can be edited
+        if ($reserva_actual['estado'] !== 'pendiente') {
+            throw new Exception("Solo puedes editar reservas pendientes");
+        }
+
+        // Validate dates
+        if ($fecha_inicio >= $fecha_fin) {
+            throw new Exception("La fecha de inicio debe ser anterior a la fecha de fin");
+        }
+
+        if (!editar_reserva_usuario($conexionPDO, $id_reserva, $fecha_inicio, 
+                                    $fecha_fin, $id_habitacion, $numero_camas)) {
+            throw new Exception("No hay suficientes camas disponibles");
+        }
+
+        $conexionPDO->commit();
+        $mensaje = "Reserva actualizada exitosamente";
+    } catch (Exception $e) {
+        if ($conexionPDO->inTransaction()) {
+            $conexionPDO->rollBack();
+        }
+        $mensaje = "Error al editar reserva: " . $e->getMessage();
+        $tipo_mensaje = 'danger';
+    }
+    break;
+```
+</CodeGroup>
+
+### Admin Editing
+
+Admins can edit any reservation using `editar_reserva_admin()` in `functions.php:1283-1359`.
+
+## Transaction Safety
+
+All multi-step reservation operations use database transactions:
+
+```php
+try {
+    $conexion->beginTransaction();
+    
+    // Multiple database operations...
+    
+    $conexion->commit();
+    return $id_reserva;
+} catch (Exception $e) {
+    $conexion->rollBack();
+    error_log("Error: " . $e->getMessage());
+    return false;
+}
+```
+
+<Info>
+Transactions ensure data consistency. If any step fails, all changes are rolled back.
+</Info>
