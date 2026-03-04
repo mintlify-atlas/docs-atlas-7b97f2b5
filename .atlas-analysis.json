@@ -1,0 +1,98 @@
+{
+  "projectType": "saas",
+  "projectName": "Refugio",
+  "projectDescription": "Mountain refuge bed reservation management system for clubs and hostels",
+  "theme": "linden",
+  "primaryColor": "#0c64c4",
+  "lightColor": "#84b4dc",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/authentication",
+              "features/reservations",
+              "features/user-management",
+              "features/room-management",
+              "features/calendar"
+            ]
+          },
+          {
+            "group": "User Guides",
+            "pages": [
+              "guides/admin-guide",
+              "guides/member-guide",
+              "guides/security"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/requirements",
+              "deployment/database-setup",
+              "deployment/configuration",
+              "deployment/production"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Functions",
+            "pages": [
+              "api/authentication",
+              "api/users",
+              "api/rooms",
+              "api/reservations",
+              "api/companions",
+              "api/utilities"
+            ]
+          },
+          {
+            "group": "Database",
+            "pages": [
+              "api/database-schema",
+              "api/connection"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Secure authentication with role-based access control (Admin/User)",
+    "Interactive calendar showing real-time bed availability",
+    "Complete user and member profile management",
+    "Room and bed control with occupancy states",
+    "Reservation approval workflow for administrators",
+    "Companion management for members and non-members",
+    "Admin dashboard with statistics and metrics",
+    "Responsive design optimized for mobile and tablets"
+  ],
+  "publicApiSurface": [
+    "comprobar_username() - User authentication",
+    "crear_usuario() - Create new user",
+    "listar_usuarios() - List all users",
+    "crear_reserva() - Create new reservation",
+    "listar_reservas() - List reservations with filters",
+    "obtener_disponibilidad() - Get bed availability by date range",
+    "listar_habitaciones() - List rooms with bed counts",
+    "actualizar_estado_reserva() - Update reservation status",
+    "agregar_acompanante() - Add companion to reservation",
+    "obtener_camas_disponibles() - Get available beds in room"
+  ]
+}
